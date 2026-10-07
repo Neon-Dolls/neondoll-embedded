@@ -1,19 +1,30 @@
 cmake_minimum_required(VERSION 3.16)
 
 if(DEFINED ENV{IDF_PATH} AND EXISTS "$ENV{IDF_PATH}/tools/cmake/project.cmake")
-    # ESP-IDF build: we are building the example as an ESP-IDF project.
-    # We want to include our Body implementation in the main component.
-    set(EXTRA_SRCS ${PROJECT_SOURCE_DIR}/../../src/neondoll/body.cpp)
-    set(EXTRA_INCLUDES ${PROJECT_SOURCE_DIR}/../../include)
-    idf_component_register(
-        SRCS "main/main.cpp" ${EXTRA_SRCS}
-        INCLUDE_DIRS "." ${EXTRA_INCLUDES}
-        REQUIRES esp_system
-    )
+    # ESP-IDF build
+    include($ENV{IDF_PATH}/tools/cmake/project.cmake)
+    project(neondoll_minimal_example)
+
+    # Build the neondoll library if it doesn't exist
+    if(NOT TARGET neondoll)
+        add_library(neondoll STATIC
+            ${PROJECT_SOURCE_DIR}/../../src/neondoll/body.cpp
+        )
+        target_include_directories(neondoll
+            ${PROJECT_SOURCE_DIR}/../../include
+            ${PROJECT_SOURCE_DIR}/../../src/neondoll
+        )
+    endif()
+
+    # Link the neondoll library to the main executable
+    target_link_libraries(${PROJECT_NAME} PRIVATE neondoll)
 else()
-    # Host build: we are being built by the top-level CMakeLists.txt.
-    # The top-level CMakeLists.txt has already built the neondoll library and set up the example to link to it.
-    # We just need to create the executable and link to neondoll.
+    # Host build (via top-level CMakeLists.txt)
+    # We assume the top-level CMakeLists.txt has already built the neondoll library.
+    # We just create the executable and link to it.
+    project(neondoll_minimal_example LANGUAGES C CXX)
+    set(CMAKE_CXX_STANDARD 17)
+    set(CMAKE_CXX_STANDARD_REQUIRED ON)
     add_executable(neondoll_minimal_example main/main.cpp)
     target_include_directories(neondoll_minimal_example PRIVATE
         ${PROJECT_SOURCE_DIR}/../..

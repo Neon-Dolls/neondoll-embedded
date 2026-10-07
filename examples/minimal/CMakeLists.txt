@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
+# If the neondoll target does not exist, we need to build it (this happens in ESP-IDF build)
 if(NOT TARGET neondoll)
     add_library(neondoll STATIC
         ${PROJECT_SOURCE_DIR}/../../src/neondoll/body.cpp
@@ -15,4 +16,4 @@ target_include_directories(neondoll_minimal_example PRIVATE
     ${PROJECT_SOURCE_DIR}/../..
     ${PROJECT_SOURCE_DIR}/../../include
 )
-target_link_libraries(neondoll_minimal_example neondoll)
+target_link_libraries(neondoll_minimal_example PRIVATE neondoll)

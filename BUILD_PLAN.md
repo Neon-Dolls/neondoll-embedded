@@ -27,6 +27,18 @@ The runtime should remain small, deterministic, observable, and boring.
 
 Establish a buildable embedded library without implementing NeonDoll protocol behavior yet.
 
+### Technology baseline
+
+- **ESP-IDF + C++17** is the initial implementation stack.
+- The portable NeonDoll runtime is constrained C++17.
+- ESP32-specific functionality is exposed through thin C++ adapters over ESP-IDF's C APIs.
+- Keep platform interfaces narrow enough that the portable runtime is not coupled to ESP32.
+- Prefer explicit ownership, RAII, bounded storage/queues, and predictable allocation behavior.
+- Avoid exceptions, RTTI dependencies, unbounded containers/queues, and unnecessary dynamic allocation.
+- ESP-IDF is the primary platform. Do not make Arduino a dependency.
+- Preserve the option for an Arduino-facing adapter later so existing ESP32 gadget firmware can adopt NeonDoll without being rewritten.
+- Rust is not part of the initial implementation. A separate Rust implementation may be considered later as another independent conformance implementation.
+
 Target:
 
 - ESP32 using ESP-IDF as the primary platform.

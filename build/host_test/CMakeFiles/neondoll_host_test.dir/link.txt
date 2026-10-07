@@ -1,0 +1,1 @@
+/usr/bin/c++ -Wl,--dependency-file=CMakeFiles/neondoll_host_test.dir/link.d CMakeFiles/neondoll_host_test.dir/test_body.cpp.o -o neondoll_host_test  ../libneondoll.a

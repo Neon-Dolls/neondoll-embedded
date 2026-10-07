@@ -1,9 +1,15 @@
 #pragma once
 #include <string>
 #include <memory>
-#include "identity.hpp"
 
 namespace neondoll {
+
+class Identity {
+public:
+    virtual ~Identity() = default;
+    virtual std::uint32_t body_id() const = 0;
+    virtual std::string to_string() const = 0;
+};
 
 class Body {
 public:
@@ -14,18 +20,9 @@ public:
 
 class BodyImpl : public Body {
 public:
-    BodyImpl() : identity_(create_identity()) {}
-
-    bool init() override {
-        // For M0, we just set the identity as initialized.
-        // In a real implementation, this would load or create the durable identity.
-        identity_->set_initialized(true);
-        return true;
-    }
-
-    std::shared_ptr<Identity> identity() const override {
-        return identity_;
-    }
+    BodyImpl();
+    bool init() override;
+    std::shared_ptr<Identity> identity() const override;
 
 private:
     std::shared_ptr<Identity> identity_;

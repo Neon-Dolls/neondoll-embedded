@@ -37,5 +37,5 @@ jobs:
           idf.py set-target esp32
       - name: Build ESP-IDF project
         run: |
-          cd examples/minimal/main
+          cd examples/minimal
           idf.py build

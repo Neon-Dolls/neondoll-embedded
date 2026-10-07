@@ -5,19 +5,17 @@ if(DEFINED ENV{IDF_PATH} AND EXISTS "$ENV{IDF_PATH}/tools/cmake/project.cmake")
     include($ENV{IDF_PATH}/tools/cmake/project.cmake)
     project(neondoll_minimal_example)
 
-    # Build the neondoll library if it doesn't exist
-    if(NOT TARGET neondoll)
-        add_library(neondoll STATIC
-            ${PROJECT_SOURCE_DIR}/../../src/neondoll/body.cpp
-        )
-        target_include_directories(neondoll
-            ${PROJECT_SOURCE_DIR}/../../include
-            ${PROJECT_SOURCE_DIR}/../../src/neondoll
-        )
-    endif()
-
-    # Link the neondoll library to the main executable
-    target_link_libraries(${PROJECT_NAME} PRIVATE neondoll)
+    # Add neondoll source files directly to the executable target
+    set(neondoll_src
+        ${PROJECT_SOURCE_DIR}/../../src/neondoll/body.cpp
+        ${PROJECT_SOURCE_DIR}/../../src/neondoll/identity.cpp
+    )
+    set(neondoll_inc
+        ${PROJECT_SOURCE_DIR}/../../include
+        ${PROJECT_SOURCE_DIR}/../../src/neondoll
+    )
+    target_sources(${PROJECT_NAME} PRIVATE ${neondoll_src})
+    target_include_directories(${PROJECT_NAME} PRIVATE ${neondoll_inc})
 else()
     # Host build (via top-level CMakeLists.txt)
     # We assume the top-level CMakeLists.txt has already built the neondoll library.

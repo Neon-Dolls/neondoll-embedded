@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [ master, 'feature/*' ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  host-build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y cmake make
+      - name: Configure CMake
+        run: cmake -S . -B build
+      - name: Build
+        run: cmake --build build
+      - name: Run tests
+        run: |
+          cd build
+          ./host_test/neondoll_host_test   # assuming the test executable is named neondoll_host_test
+
+  espidf-build:
+    runs-on: ubuntu-latest
+    container:
+      image: espressif/idf:release-v5.2
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up ESP-IDF
+        run: |
+          . /opt/esp/idf/export.sh
+          idf.py set-target esp32
+      - name: Build ESP-IDF project
+        run: |
+          cd examples/minimal/main
+          idf.py build

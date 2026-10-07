@@ -1,10 +1,12 @@
 cmake_minimum_required(VERSION 3.16)
 
-# Check if we're building with ESP-IDF
 if(DEFINED ENV{IDF_PATH} AND EXISTS "$ENV{IDF_PATH}/tools/cmake/project.cmake")
-    # ESP-IDF build
+    # We are building with ESP-IDF
     include($ENV{IDF_PATH}/tools/cmake/project.cmake)
-    project(neondoll_minimal_example)
+    if(NOT PROJECT_NAME)
+        # This is the top-level project call for the ESP-IDF build
+        project(neondoll_minimal_example)
+    endif()
 
     # Build the neondoll library from our sources
     add_library(neondoll STATIC
@@ -15,26 +17,16 @@ if(DEFINED ENV{IDF_PATH} AND EXISTS "$ENV{IDF_PATH}/tools/cmake/project.cmake")
         ${PROJECT_SOURCE_DIR}/../../src/neondoll
     )
 
-    # Link the neondoll library to the main executable (created by project())
+    # Link the neondoll library to the main executable
     target_link_libraries(${PROJECT_NAME} PRIVATE neondoll)
 else()
-    # Regular CMake build for host tests
-    project(neondoll_minimal_example LANGUAGES C CXX)
-    
-    # Set C++ standard
-    set(CMAKE_CXX_STANDARD 17)
-    set(CMAKE_CXX_STANDARD_REQUIRED ON)
-    
-    # Include directories
-    include_directories(${PROJECT_SOURCE_DIR}/../..)
-    include_directories(${PROJECT_SOURCE_DIR}/../../include)
-    
-    # Source files
-    set(SOURCES main/main.cpp)
-    
-    # Create executable
-    add_executable(neondoll_minimal_example ${SOURCES})
-    
-    # Link against neondoll library (built in the top-level CMakeLists.txt)
-    target_link_libraries(neondoll_minimal_example neondoll)
+    # Not building with ESP-IDF (host build via top-level CMakeLists.txt)
+    # We assume we are already in a project (the top-level neondoll-embedded project)
+    # So we just create the executable and link to the neondoll library
+    add_executable(neondoll_minimal_example main/main.cpp)
+    target_include_directories(neondoll_minimal_example PRIVATE
+        ${PROJECT_SOURCE_DIR}/../..
+        ${PROJECT_SOURCE_DIR}/../../include
+    )
+    target_link_libraries(neondoll_minimal_example PRIVATE neondoll)
 endif()

@@ -1,15 +1,9 @@
 #pragma once
 #include <string>
 #include <memory>
+#include "identity.hpp"
 
 namespace neondoll {
-
-class Identity {
-public:
-    virtual ~Identity() = default;
-    virtual std::uint32_t body_id() const = 0;
-    virtual std::string to_string() const = 0;
-};
 
 class Body {
 public:

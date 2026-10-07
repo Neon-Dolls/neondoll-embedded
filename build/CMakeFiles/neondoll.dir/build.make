@@ -86,33 +86,17 @@ CMakeFiles/neondoll.dir/src/neondoll/body.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/neondoll.dir/src/neondoll/body.cpp.s"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /srv/vfac/neondoll-embedded/src/neondoll/body.cpp -o CMakeFiles/neondoll.dir/src/neondoll/body.cpp.s
 
-CMakeFiles/neondoll.dir/src/neondoll/terminal.cpp.o: CMakeFiles/neondoll.dir/flags.make
-CMakeFiles/neondoll.dir/src/neondoll/terminal.cpp.o: /srv/vfac/neondoll-embedded/src/neondoll/terminal.cpp
-CMakeFiles/neondoll.dir/src/neondoll/terminal.cpp.o: CMakeFiles/neondoll.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/srv/vfac/neondoll-embedded/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_2) "Building CXX object CMakeFiles/neondoll.dir/src/neondoll/terminal.cpp.o"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/neondoll.dir/src/neondoll/terminal.cpp.o -MF CMakeFiles/neondoll.dir/src/neondoll/terminal.cpp.o.d -o CMakeFiles/neondoll.dir/src/neondoll/terminal.cpp.o -c /srv/vfac/neondoll-embedded/src/neondoll/terminal.cpp
-
-CMakeFiles/neondoll.dir/src/neondoll/terminal.cpp.i: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/neondoll.dir/src/neondoll/terminal.cpp.i"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /srv/vfac/neondoll-embedded/src/neondoll/terminal.cpp > CMakeFiles/neondoll.dir/src/neondoll/terminal.cpp.i
-
-CMakeFiles/neondoll.dir/src/neondoll/terminal.cpp.s: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/neondoll.dir/src/neondoll/terminal.cpp.s"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /srv/vfac/neondoll-embedded/src/neondoll/terminal.cpp -o CMakeFiles/neondoll.dir/src/neondoll/terminal.cpp.s
-
 # Object files for target neondoll
 neondoll_OBJECTS = \
-"CMakeFiles/neondoll.dir/src/neondoll/body.cpp.o" \
-"CMakeFiles/neondoll.dir/src/neondoll/terminal.cpp.o"
+"CMakeFiles/neondoll.dir/src/neondoll/body.cpp.o"
 
 # External object files for target neondoll
 neondoll_EXTERNAL_OBJECTS =
 
 libneondoll.a: CMakeFiles/neondoll.dir/src/neondoll/body.cpp.o
-libneondoll.a: CMakeFiles/neondoll.dir/src/neondoll/terminal.cpp.o
 libneondoll.a: CMakeFiles/neondoll.dir/build.make
 libneondoll.a: CMakeFiles/neondoll.dir/link.txt
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/srv/vfac/neondoll-embedded/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_3) "Linking CXX static library libneondoll.a"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/srv/vfac/neondoll-embedded/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_2) "Linking CXX static library libneondoll.a"
 	$(CMAKE_COMMAND) -P CMakeFiles/neondoll.dir/cmake_clean_target.cmake
 	$(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/neondoll.dir/link.txt --verbose=$(VERBOSE)
 

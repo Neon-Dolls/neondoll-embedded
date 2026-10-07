@@ -3,12 +3,11 @@
 
 namespace neondoll {
 
-BodyImpl::BodyImpl() : identity_(std::make_shared<IdentityImpl>()) {}
+BodyImpl::BodyImpl() : identity_(create_identity()) {}
 
 bool BodyImpl::init() {
-    // For M0, we just set the identity as initialized.
+    // For M0, we consider the Body initialized once we have an identity.
     // In a real implementation, this would load or create the durable identity.
-    identity_->set_initialized(true);
     return true;
 }
 

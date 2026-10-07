@@ -171,6 +171,44 @@ depend:
 	cd /srv/vfac/neondoll-embedded/build && $(CMAKE_COMMAND) -S$(CMAKE_SOURCE_DIR) -B$(CMAKE_BINARY_DIR) --check-build-system CMakeFiles/Makefile.cmake 1
 .PHONY : depend
 
+# Convenience name for target.
+examples/minimal/CMakeFiles/neondoll_minimal_example.dir/rule:
+	cd /srv/vfac/neondoll-embedded/build && $(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 examples/minimal/CMakeFiles/neondoll_minimal_example.dir/rule
+.PHONY : examples/minimal/CMakeFiles/neondoll_minimal_example.dir/rule
+
+# Convenience name for target.
+neondoll_minimal_example: examples/minimal/CMakeFiles/neondoll_minimal_example.dir/rule
+.PHONY : neondoll_minimal_example
+
+# fast build rule for target.
+neondoll_minimal_example/fast:
+	cd /srv/vfac/neondoll-embedded/build && $(MAKE) $(MAKESILENT) -f examples/minimal/CMakeFiles/neondoll_minimal_example.dir/build.make examples/minimal/CMakeFiles/neondoll_minimal_example.dir/build
+.PHONY : neondoll_minimal_example/fast
+
+main/main.o: main/main.cpp.o
+.PHONY : main/main.o
+
+# target to build an object file
+main/main.cpp.o:
+	cd /srv/vfac/neondoll-embedded/build && $(MAKE) $(MAKESILENT) -f examples/minimal/CMakeFiles/neondoll_minimal_example.dir/build.make examples/minimal/CMakeFiles/neondoll_minimal_example.dir/main/main.cpp.o
+.PHONY : main/main.cpp.o
+
+main/main.i: main/main.cpp.i
+.PHONY : main/main.i
+
+# target to preprocess a source file
+main/main.cpp.i:
+	cd /srv/vfac/neondoll-embedded/build && $(MAKE) $(MAKESILENT) -f examples/minimal/CMakeFiles/neondoll_minimal_example.dir/build.make examples/minimal/CMakeFiles/neondoll_minimal_example.dir/main/main.cpp.i
+.PHONY : main/main.cpp.i
+
+main/main.s: main/main.cpp.s
+.PHONY : main/main.s
+
+# target to generate assembly for a file
+main/main.cpp.s:
+	cd /srv/vfac/neondoll-embedded/build && $(MAKE) $(MAKESILENT) -f examples/minimal/CMakeFiles/neondoll_minimal_example.dir/build.make examples/minimal/CMakeFiles/neondoll_minimal_example.dir/main/main.cpp.s
+.PHONY : main/main.cpp.s
+
 # Help Target
 help:
 	@echo "The following are some of the valid targets for this Makefile:"
@@ -184,6 +222,10 @@ help:
 	@echo "... list_install_components"
 	@echo "... rebuild_cache"
 	@echo "... test"
+	@echo "... neondoll_minimal_example"
+	@echo "... main/main.o"
+	@echo "... main/main.i"
+	@echo "... main/main.s"
 .PHONY : help
 
 

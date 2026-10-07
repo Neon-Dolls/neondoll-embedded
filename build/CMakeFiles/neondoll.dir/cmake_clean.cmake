@@ -1,8 +1,6 @@
 file(REMOVE_RECURSE
   "CMakeFiles/neondoll.dir/src/neondoll/body.cpp.o"
   "CMakeFiles/neondoll.dir/src/neondoll/body.cpp.o.d"
-  "CMakeFiles/neondoll.dir/src/neondoll/terminal.cpp.o"
-  "CMakeFiles/neondoll.dir/src/neondoll/terminal.cpp.o.d"
   "libneondoll.a"
   "libneondoll.pdb"
 )

@@ -6,6 +6,7 @@
 /srv/vfac/neondoll-embedded/build/CMakeFiles/install.dir
 /srv/vfac/neondoll-embedded/build/CMakeFiles/install/local.dir
 /srv/vfac/neondoll-embedded/build/CMakeFiles/install/strip.dir
+/srv/vfac/neondoll-embedded/build/examples/minimal/CMakeFiles/neondoll_minimal_example.dir
 /srv/vfac/neondoll-embedded/build/examples/minimal/CMakeFiles/test.dir
 /srv/vfac/neondoll-embedded/build/examples/minimal/CMakeFiles/edit_cache.dir
 /srv/vfac/neondoll-embedded/build/examples/minimal/CMakeFiles/rebuild_cache.dir

@@ -160,9 +160,8 @@ host_test/CMakeFiles/neondoll_host_test.dir/test_body.cpp.o: \
  /usr/include/c++/14/bits/basic_ios.tcc \
  /usr/include/c++/14/bits/ostream.tcc /usr/include/c++/14/istream \
  /usr/include/c++/14/bits/istream.tcc /usr/include/c++/14/cassert \
- /usr/include/assert.h \
- /srv/vfac/neondoll-embedded/include/neondoll/identity.hpp \
- /usr/include/c++/14/memory /usr/include/c++/14/bits/stl_tempbuf.h \
+ /usr/include/assert.h /usr/include/c++/14/memory \
+ /usr/include/c++/14/bits/stl_tempbuf.h \
  /usr/include/c++/14/bits/stl_uninitialized.h \
  /usr/include/c++/14/bits/stl_raw_storage_iter.h \
  /usr/include/c++/14/bits/align.h \
@@ -181,4 +180,7 @@ host_test/CMakeFiles/neondoll_host_test.dir/test_body.cpp.o: \
  /usr/include/c++/14/backward/auto_ptr.h \
  /usr/include/c++/14/pstl/glue_memory_defs.h \
  /usr/include/c++/14/pstl/execution_defs.h \
- /srv/vfac/neondoll-embedded/include/neondoll/body.hpp
+ /srv/vfac/neondoll-embedded/include/neondoll/identity.hpp \
+ /usr/include/c++/14/cstdint \
+ /srv/vfac/neondoll-embedded/include/neondoll/body.hpp \
+ /srv/vfac/neondoll-embedded/include/neondoll/identity.hpp

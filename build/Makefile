@@ -185,6 +185,19 @@ neondoll/fast:
 .PHONY : neondoll/fast
 
 #=============================================================================
+# Target rules for targets named neondoll_minimal_example
+
+# Build rule for target.
+neondoll_minimal_example: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 neondoll_minimal_example
+.PHONY : neondoll_minimal_example
+
+# fast build rule for target.
+neondoll_minimal_example/fast:
+	$(MAKE) $(MAKESILENT) -f examples/minimal/CMakeFiles/neondoll_minimal_example.dir/build.make examples/minimal/CMakeFiles/neondoll_minimal_example.dir/build
+.PHONY : neondoll_minimal_example/fast
+
+#=============================================================================
 # Target rules for targets named neondoll_host_test
 
 # Build rule for target.
@@ -221,30 +234,6 @@ src/neondoll/body.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/neondoll.dir/build.make CMakeFiles/neondoll.dir/src/neondoll/body.cpp.s
 .PHONY : src/neondoll/body.cpp.s
 
-src/neondoll/terminal.o: src/neondoll/terminal.cpp.o
-.PHONY : src/neondoll/terminal.o
-
-# target to build an object file
-src/neondoll/terminal.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/neondoll.dir/build.make CMakeFiles/neondoll.dir/src/neondoll/terminal.cpp.o
-.PHONY : src/neondoll/terminal.cpp.o
-
-src/neondoll/terminal.i: src/neondoll/terminal.cpp.i
-.PHONY : src/neondoll/terminal.i
-
-# target to preprocess a source file
-src/neondoll/terminal.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/neondoll.dir/build.make CMakeFiles/neondoll.dir/src/neondoll/terminal.cpp.i
-.PHONY : src/neondoll/terminal.cpp.i
-
-src/neondoll/terminal.s: src/neondoll/terminal.cpp.s
-.PHONY : src/neondoll/terminal.s
-
-# target to generate assembly for a file
-src/neondoll/terminal.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/neondoll.dir/build.make CMakeFiles/neondoll.dir/src/neondoll/terminal.cpp.s
-.PHONY : src/neondoll/terminal.cpp.s
-
 # Help Target
 help:
 	@echo "The following are some of the valid targets for this Makefile:"
@@ -260,12 +249,10 @@ help:
 	@echo "... test"
 	@echo "... neondoll"
 	@echo "... neondoll_host_test"
+	@echo "... neondoll_minimal_example"
 	@echo "... src/neondoll/body.o"
 	@echo "... src/neondoll/body.i"
 	@echo "... src/neondoll/body.s"
-	@echo "... src/neondoll/terminal.o"
-	@echo "... src/neondoll/terminal.i"
-	@echo "... src/neondoll/terminal.s"
 .PHONY : help
 
 

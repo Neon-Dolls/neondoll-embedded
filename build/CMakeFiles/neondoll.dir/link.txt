@@ -1,2 +1,2 @@
-/usr/bin/ar qc libneondoll.a CMakeFiles/neondoll.dir/src/neondoll/body.cpp.o CMakeFiles/neondoll.dir/src/neondoll/terminal.cpp.o
+/usr/bin/ar qc libneondoll.a CMakeFiles/neondoll.dir/src/neondoll/body.cpp.o
 /usr/bin/ranlib libneondoll.a

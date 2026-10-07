@@ -10,10 +10,9 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 # Library target for the portable interfaces and core logic
-# Note: IdentityImpl is now header-only, so we only need body.cpp and terminal.cpp
+# Note: IdentityImpl is now header-only, so we only need body.cpp
 add_library(neondoll STATIC
     src/neondoll/body.cpp
-    src/neondoll/terminal.cpp
 )
 
 # Example target (ESP32)

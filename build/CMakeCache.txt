@@ -230,6 +230,15 @@ neondoll-embedded_IS_TOP_LEVEL:STATIC=ON
 //Value Computed by CMake
 neondoll-embedded_SOURCE_DIR:STATIC=/srv/vfac/neondoll-embedded
 
+//Value Computed by CMake
+neondoll_minimal_example_BINARY_DIR:STATIC=/srv/vfac/neondoll-embedded/build/examples/minimal
+
+//Value Computed by CMake
+neondoll_minimal_example_IS_TOP_LEVEL:STATIC=OFF
+
+//Value Computed by CMake
+neondoll_minimal_example_SOURCE_DIR:STATIC=/srv/vfac/neondoll-embedded/examples/minimal
+
 
 ########################
 # INTERNAL cache entries

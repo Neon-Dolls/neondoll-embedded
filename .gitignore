@@ -1,0 +1,32 @@
+# ESP-IDF build directory
+build/
+sdkconfig
+sdkconfig.old
+
+# Compiler generated files
+*.o
+*.a
+*.elf
+*.bin
+*.map
+*.d
+*.dep
+*.dis
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+
+# Python cache
+__pycache__
+*.py[cod]
+
+# OS generated files
+.DS_Store
+Thumbs.db

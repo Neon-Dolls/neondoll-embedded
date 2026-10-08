@@ -79,6 +79,24 @@ Acceptance:
 - portable pieces can be tested without flashing hardware
 - CI builds the library/example
 
+## Implementation status — 2026-10-08
+
+**M0: merged as preliminary scaffolding; acceptance pending.** M1–M9 have not been accepted.
+
+The M0 merge is not evidence of a working ESP-IDF firmware or green CI. Before beginning M1, complete the following M0 stabilization work in a focused follow-up PR:
+
+- Remove all tracked generated `build/` files (adding `.gitignore` alone does not untrack them); keep generated build output out of Git.
+- Use a real ESP-IDF component under `components/neondoll/` with `idf_component_register`, and a minimal ESP-IDF application with `extern "C" void app_main()`. Do not attach portable sources to the IDF project target manually.
+- Ensure the example genuinely builds with `idf.py build` for ESP32. Fix invalid `sdkconfig.defaults` options and demonstrate basic firmware startup.
+- Keep the host CMake/test build independent of ESP-IDF; verify tests using CTest.
+- Correct the GitHub Actions ESP-IDF environment/setup and require observed successful host-test and firmware-build jobs, not just a committed workflow YAML.
+- Remove premature placeholder Body ID/identity semantics and invented Body/Terminal protocol abstractions. M0 defines narrow **platform interfaces** (storage, entropy, clock, network availability, logging), not M1 identity behavior.
+- Verify C++17 configuration and constrained-memory conventions; document the exact build/test commands and results.
+
+**Repository convention:** `master` is the canonical integration and PR target branch. Preserve this build plan when updating branches.
+
+**Milestone gate:** Do not treat M0 as complete or begin M1 until the above acceptance checks pass. The already-merged scaffolding can remain as a baseline while these fixes are made.
+
 ## M1 — Persistent Body Identity
 
 An ESP32 becomes a persistent NeonDoll Body.

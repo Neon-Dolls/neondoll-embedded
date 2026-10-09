@@ -104,6 +104,7 @@ public:
 
 /**
  * @brief Logging interface.
+ *        Replaced variadic API with bounded, non-variadic message interface.
  */
 class Logger {
 public:
@@ -120,10 +121,26 @@ public:
     /// Log a message at the given level.
     /// @param level   Logging level (higher is more severe).
     /// @param tag     Null-terminated tag string.
-    /// @param format  printf-style format string.
-    /// @param ...     Arguments for the format string.
+    /// @param msg     Null-terminated message string (max 255 bytes including null).
     /// @return 0 on success, negative error code on failure.
-    virtual int log(int level, const char* tag, const char* format, ...) = 0;
+    virtual int log(int level, const char* tag, const char* msg) = 0;
+};
+
+} // namespace neondoll
+
+// Runtime context structure - replaces global pointers with explicit ownership
+namespace neondoll {
+
+/**
+ * @brief Runtime context holding platform dependencies.
+ *        Owned by the caller, lifetime must exceed neondoll_init/deinit calls.
+ */
+struct PlatformContext {
+    Storage*       storage       = nullptr;  ///< Not owned by NeonDoll
+    EntropySource* entropy       = nullptr;  ///< Not owned by NeonDoll
+    Clock*         clock         = nullptr;  ///< Not owned by NeonDoll
+    NetworkAvailability* network = nullptr;  ///< Not owned by NeonDoll
+    Logger*        logger        = nullptr;  ///< Not owned by NeonDoll
 };
 
 } // namespace neondoll
@@ -133,32 +150,21 @@ extern "C" {
 #endif
 
 /**
- * @brief Inject mock platform objects for testing.
- *        This function is only intended for use in host tests.
- *        In production, the platform objects are the ESP32-specific implementations.
- * @param storage   Pointer to a Storage object (or nullptr to use default).
- * @param entropy   Pointer to an EntropySource object (or nullptr to use default).
- * @param clock     Pointer to a Clock object (or nullptr to use default).
- * @param network   Pointer to a NetworkAvailability object (or nullptr to use default).
- * @param logger    Pointer to a Logger object (or nullptr to use default).
+ * @brief Initialize the NeonDoll runtime with explicit platform dependencies.
+ *        Caller owns the PlatformContext and platform objects.
+ * @param ctx   Platform context containing non-owning pointers to platform objects.
+ *              Must remain valid for the lifetime of the NeonDoll runtime.
+ * @return 0 on success, negative error code on failure.
+ *         On failure, any successfully initialized platforms are cleaned up.
  */
-void neondoll_set_platform(neondoll::Storage* storage,
-                           neondoll::EntropySource* entropy,
-                           neondoll::Clock* clock,
-                           neondoll::NetworkAvailability* network,
-                           neondoll::Logger* logger);
-
-/**
- * @brief Initialize the NeonDoll runtime.
- *        This calls init() on all platform objects.
- */
-void neondoll_init(void);
+int neondoll_init(const neondoll::PlatformContext* ctx);
 
 /**
  * @brief Deinitialize the NeonDoll runtime.
- *        This calls deinit() on all platform objects.
+ *        Caller must ensure no further NeonDoll API calls are made after this.
+ * @param ctx   Platform context passed to neondoll_init (must match).
  */
-void neondoll_deinit(void);
+void neondoll_deinit(const neondoll::PlatformContext* ctx);
 
 #ifdef __cplusplus
 }

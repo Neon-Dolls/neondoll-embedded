@@ -48,7 +48,11 @@ public:
     bool deinit_called = false;
     int init() override { init_called = true; return 0; }
     int deinit() override { deinit_called = true; return 0; }
-    int log(int level, const char* tag, const char* format, ...) override { return 0; }
+    int log(int level, const char* tag, const char* msg) override { 
+        // For test, we just accept the call and return success.
+        (void)level; (void)tag; (void)msg;
+        return 0; 
+    }
 };
 
 int main() {
@@ -61,18 +65,24 @@ int main() {
     MockNetworkAvailability network;
     MockLogger logger;
 
-    // Set the platform to use mocks
-    neondoll_set_platform(&storage, &entropy, &clock, &network, &logger);
+    // Set up the platform context
+    neondoll::PlatformContext ctx;
+    ctx.storage = &storage;
+    ctx.entropy = &entropy;
+    ctx.clock = &clock;
+    ctx.network = &network;
+    ctx.logger = &logger;
 
-    // Verify that the init/deinit functions are called via the C-API
-    neondoll_init();
+    // Initialize NeonDoll with explicit context
+    assert(neondoll_init(&ctx) == 0);
     assert(storage.init_called == true);
     assert(entropy.init_called == true);
     assert(clock.init_called == true);
     assert(network.init_called == true);
     assert(logger.init_called == true);
 
-    neondoll_deinit();
+    // Deinitialize
+    neondoll_deinit(&ctx);
     assert(storage.deinit_called == true);
     assert(entropy.deinit_called == true);
     assert(clock.deinit_called == true);
@@ -96,7 +106,7 @@ int main() {
         *flag = available;
     }, &network_available) == -1);
 
-    assert(logger.log(0, "test", "hello %d", 42) == 0);
+    assert(logger.log(0, "test", "hello") == 0);
 
     std::cout << "All tests passed." << std::endl;
     return 0;

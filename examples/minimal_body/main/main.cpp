@@ -1,7 +1,7 @@
 #include <neondoll/platform.hpp>
 #include <stdio.h>
 
-void app_main(void)
+extern "C" void app_main(void)
 {
     printf("Calling neondoll_init...\n");
     neondoll_init();

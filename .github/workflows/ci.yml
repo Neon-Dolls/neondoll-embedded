@@ -9,23 +9,15 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-
+    container: espressif/idf:latest
     steps:
     - uses: actions/checkout@v4
-
-    - name: Install ESP-IDF
-      uses: espressif/install-esp-idf-action@v1
       with:
-        version: latest
-        setup-method: stable
+        submodules: recursive
 
-    - name: Build ESP-IDF Firmware
+    - name: Build ESP-IDF firmware
       working-directory: examples/minimal_body
-      run: |
-        . $IDF_PATH/export.sh
-        # Use a generous timeout for the build (WSL disk I/O can be slow)
-        timeout 1800 idf.py build
+      run: idf.py build
 
     - name: Check ESP-IDF Build Artifacts
       working-directory: examples/minimal_body/build
@@ -33,10 +25,12 @@ jobs:
         ls -lh minimal_body.elf minimal_body.bin
         size minimal_body.elf
 
+    - name: Install g++ for host test
+      run: apt-get update && apt-get install -y g++
+
     - name: Build Host Test
       run: |
         g++ -std=c++17 -Icomponents/neondoll/include host_test/test_neondoll.cpp components/neondoll/src/neondoll.cpp -o host_test/test_neondoll
 
     - name: Run Host Test
-      run: |
-        host_test/test_neondoll
+      run: host_test/test_neondoll

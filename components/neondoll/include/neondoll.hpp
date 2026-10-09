@@ -1,12 +1,14 @@
 #pragma once
 
 #ifdef __cplusplus
-extern "C" {
-#endif
+#include <cstddef>
+#include "platform.hpp"
 
-void neondoll_init(void);
-void neondoll_deinit(void);
+namespace neondoll {
 
-#ifdef __cplusplus
-}
-#endif
+void set_platform(Platform* platform);
+void init(void);
+void deinit(void);
+
+} // namespace neondoll
+#endif // __cplusplus

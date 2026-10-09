@@ -1,9 +1,23 @@
 #include "neondoll.hpp"
 
-void neondoll_init(void) {
-    // Stub implementation
+namespace neondoll {
+
+static Platform* g_platform = nullptr;
+
+void set_platform(Platform* platform) {
+    g_platform = platform;
 }
 
-void neondoll_deinit(void) {
-    // Stub implementation
+void init(void) {
+    if (g_platform) {
+        g_platform->init();
+    }
 }
+
+void deinit(void) {
+    if (g_platform) {
+        g_platform->deinit();
+    }
+}
+
+} // namespace neondoll

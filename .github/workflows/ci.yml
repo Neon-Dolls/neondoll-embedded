@@ -34,7 +34,7 @@ jobs:
         ls -lh examples/minimal_body/build/minimal_body.elf examples/minimal_body/build/minimal_body.bin
         size examples/minimal_body/build/minimal_body.elf
     - name: Install g++ for host test
-      run: apt-get update && apt-get install -y g++
+      run: sudo apt-get update && sudo apt-get install -y g++
     - name: Build Host Test
       run: |
         g++ -std=c++17 -Icomponents/neondoll/include host_test/test_neondoll.cpp components/neondoll/src/neondoll.cpp -o host_test/test_neondoll

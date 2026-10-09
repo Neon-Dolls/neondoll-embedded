@@ -24,9 +24,12 @@ public:
     /// Read a value by key.
     /// @param key      Null-terminated key string.
     /// @param[out] out Buffer to store the value.
-    /// @param[in]  max_size Maximum number of bytes to read (including null terminator).
-    /// @return Number of bytes stored in @p out (excluding null terminator) on success,
-    ///         negative error code on failure.
+    /// @param[in]  max_size Maximum number of bytes to read.
+    /// @return Number of bytes stored in @p out on success,
+    ///         negative error code on failure:
+    ///         -1: key not found
+    ///         -2: buffer too small (value size > max_size)
+    ///         -3: I/O error
     virtual std::ptrdiff_t read(const char* key, void* out, size_t max_size) = 0;
 
     /// Write a value by key.
@@ -126,11 +129,6 @@ public:
     virtual int log(int level, const char* tag, const char* msg) = 0;
 };
 
-} // namespace neondoll
-
-// Runtime context structure - replaces global pointers with explicit ownership
-namespace neondoll {
-
 /**
  * @brief Runtime context holding platform dependencies.
  *        Owned by the caller, lifetime must exceed neondoll_init/deinit calls.
@@ -145,6 +143,7 @@ struct PlatformContext {
 
 } // namespace neondoll
 
+// Forward declarations for the C API
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -167,7 +166,51 @@ int neondoll_init(const neondoll::PlatformContext* ctx);
 void neondoll_deinit(const neondoll::PlatformContext* ctx);
 
 #ifdef __cplusplus
-}
+} // extern "C"
 #endif
+
+namespace neondoll {
+
+/**
+ * @brief Runtime object that owns the platform interfaces and tracks init/deinit state.
+ *        Prevents double init/deinit and rolls back safely on partial failure.
+ */
+class Runtime {
+public:
+    explicit Runtime(PlatformContext ctx) : ctx_(ctx), initialized_(false) {}
+
+    /// Initialize the NeonDoll runtime with explicit platform dependencies.
+    /// @return 0 on success, negative error code on failure.
+    ///         On failure, any successfully initialized platforms are cleaned up.
+    int init() {
+        if (initialized_) {
+            return -1; // already initialized
+        }
+        int ret = neondoll_init(&ctx_);
+        if (ret == 0) {
+            initialized_ = true;
+        }
+        return ret;
+    }
+
+    /// Deinitialize the NeonDoll runtime.
+    /// Caller must ensure no further NeonDoll API calls are made after this.
+    void deinit() {
+        if (!initialized_) {
+            return;
+        }
+        neondoll_deinit(&ctx_);
+        initialized_ = false;
+    }
+
+    /// Check if the runtime has been successfully initialized.
+    bool is_initialized() const { return initialized_; }
+
+private:
+    PlatformContext ctx_;
+    bool initialized_;
+};
+
+} // namespace neondoll
 
 #endif // NEONDOLL_PLATFORM_HPP

@@ -2,6 +2,8 @@
 
 namespace neondoll {
 
+bool s_initialized = false;
+
 // Production implementations for ESP32
 class Esp32Storage : public Storage {
 public:
@@ -47,6 +49,11 @@ int neondoll_init(const neondoll::PlatformContext* ctx) {
     // Validate context
     if (!ctx) {
         return -1; // Invalid argument
+    }
+
+    // Prevent double initialization
+    if (neondoll::s_initialized) {
+        return -1; // Already initialized
     }
 
     // Extract pointers from context
@@ -120,6 +127,8 @@ int neondoll_init(const neondoll::PlatformContext* ctx) {
         logger_init = true;
     }
 
+    // Mark as initialized only after all succeeded
+    neondoll::s_initialized = true;
     return 0; // Success
 }
 
@@ -141,6 +150,9 @@ void neondoll_deinit(const neondoll::PlatformContext* ctx) {
     if (clock) clock->deinit();
     if (entropy) entropy->deinit();
     if (storage) storage->deinit();
+
+    // Mark as uninitialized
+    neondoll::s_initialized = false;
 }
 
 } // extern "C"

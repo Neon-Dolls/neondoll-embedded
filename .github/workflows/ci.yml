@@ -15,25 +15,28 @@ jobs:
     - uses: actions/checkout@v4
       with:
         submodules: recursive
-
-    - name: Build ESP-IDF firmware
-      uses: espressif/esp-idf-ci-action@v1
+    - name: Debug environment
+      run: |
+        echo "IDF_PATH before: $IDF_PATH"
+        which idf.py || echo "idf.py not found before setup"
+    - name: Setup ESP-IDF
+      uses: espressif/esp-idf-ci-action@v2
       with:
         esp_idf_version: latest
         target: esp32
         path: examples/minimal_body
-
+    - name: Debug environment after setup
+      run: |
+        echo "IDF_PATH after: $IDF_PATH"
+        which idf.py || echo "idf.py not found after setup"
     - name: Check ESP-IDF Build Artifacts
       run: |
         ls -lh examples/minimal_body/build/minimal_body.elf examples/minimal_body/build/minimal_body.bin
         size examples/minimal_body/build/minimal_body.elf
-
     - name: Install g++ for host test
       run: apt-get update && apt-get install -y g++
-
     - name: Build Host Test
       run: |
         g++ -std=c++17 -Icomponents/neondoll/include host_test/test_neondoll.cpp components/neondoll/src/neondoll.cpp -o host_test/test_neondoll
-
     - name: Run Host Test
       run: host_test/test_neondoll

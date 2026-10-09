@@ -20,7 +20,7 @@ jobs:
         echo "IDF_PATH before: $IDF_PATH"
         which idf.py || echo "idf.py not found before setup"
     - name: Setup ESP-IDF
-      uses: espressif/esp-idf-ci-action@v2
+      uses: espressif/esp-idf-ci-action@v1
       with:
         esp_idf_version: latest
         target: esp32

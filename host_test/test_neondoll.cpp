@@ -1,88 +1,103 @@
-#include <iostream>
+#include <neondoll/platform.hpp>
 #include <cassert>
-#include "../components/neondoll/include/neondoll/platform.hpp"
-#include "../components/neondoll/include/neondoll.hpp"
+#include <cstring>
+#include <iostream>
 
-class MockPlatform : public neondoll::Platform {
+// Mock implementations for each interface
+class MockStorage : public neondoll::Storage {
 public:
     bool init_called = false;
     bool deinit_called = false;
-    bool storage_init_called = false;
-    bool entropy_init_called = false;
-    bool clock_init_called = false;
-    bool network_init_called = false;
-    bool log_init_called = false;
+    int init() override { init_called = true; return 0; }
+    int deinit() override { deinit_called = true; return 0; }
+    std::ptrdiff_t read(const char* key, void* out, size_t max_size) override { return -1; }
+    int write(const char* key, const void* in, size_t size) override { return -1; }
+};
 
-    void init() override {
-        init_called = true;
-        std::cout << "MockPlatform init called\n";
-    }
+class MockEntropySource : public neondoll::EntropySource {
+public:
+    bool init_called = false;
+    bool deinit_called = false;
+    int init() override { init_called = true; return 0; }
+    int deinit() override { deinit_called = true; return 0; }
+    int get_random(void* out, size_t len) override { return -1; }
+};
 
-    void deinit() override {
-        deinit_called = true;
-        std::cout << "MockPlatform deinit called\n";
-    }
+class MockClock : public neondoll::Clock {
+public:
+    bool init_called = false;
+    bool deinit_called = false;
+    uint64_t fake_time = 1000;
+    int init() override { init_called = true; return 0; }
+    int deinit() override { deinit_called = true; return 0; }
+    uint64_t now_ms() override { return fake_time; }
+};
 
-    void storage_init() override {
-        storage_init_called = true;
-        std::cout << "MockPlatform storage_init called\n";
-    }
+class MockNetworkAvailability : public neondoll::NetworkAvailability {
+public:
+    bool init_called = false;
+    bool deinit_called = false;
+    int init() override { init_called = true; return 0; }
+    int deinit() override { deinit_called = true; return 0; }
+    int set_callback(Callback cb, void* arg) override { return -1; }
+};
 
-    void entropy_init() override {
-        entropy_init_called = true;
-        std::cout << "MockPlatform entropy_init called\n";
-    }
-
-    void clock_init() override {
-        clock_init_called = true;
-        std::cout << "MockPlatform clock_init called\n";
-    }
-
-    void network_init() override {
-        network_init_called = true;
-        std::cout << "MockPlatform network_init called\n";
-    }
-
-    void log_init() override {
-        log_init_called = true;
-        std::cout << "MockPlatform log_init called\n";
-    }
+class MockLogger : public neondoll::Logger {
+public:
+    bool init_called = false;
+    bool deinit_called = false;
+    int init() override { init_called = true; return 0; }
+    int deinit() override { deinit_called = true; return 0; }
+    int log(int level, const char* tag, const char* format, ...) override { return 0; }
 };
 
 int main() {
-    MockPlatform platform;
-    neondoll::set_platform(&platform);
+    std::cout << "Running M0.2 host test..." << std::endl;
 
-    neondoll::init();
-    assert(platform.init_called);
+    // Create mock objects
+    MockStorage storage;
+    MockEntropySource entropy;
+    MockClock clock;
+    MockNetworkAvailability network;
+    MockLogger logger;
 
-    neondoll::deinit();
-    assert(platform.deinit_called);
+    // Set the platform to use mocks
+    neondoll_set_platform(&storage, &entropy, &clock, &network, &logger);
 
-    // Optionally check that the narrow interfaces were called via neondoll::init?
-    // The neondoll::init() currently only calls Platform::init() and deinit().
-    // The narrow interfaces are not called by the current init/deinit.
-    // According to BUILD_PLAN.md, the narrow M0 platform interfaces are to be added.
-    // We should perhaps call them in neondoll::init()? But the spec says "Add the narrow M0 platform interfaces specified in BUILD_PLAN.md".
-    // We have added them as pure virtuals in Platform. The neondoll::init() and deinit() currently only call init/deinit.
-    // We might need to update neondoll::init() to also call those narrow interfaces? However the user didn't specify that.
-    // The requirement: "Add the narrow M0 platform interfaces specified in BUILD_PLAN.md (storage, entropy, clock, network availability, logging)."
-    // We have added them as pure virtuals. The neondoll::init() and deinit() may not call them; but the test can still verify they exist.
-    // For completeness, we could have neondoll::init() call all of them? But that might be beyond M0.
-    // Let's just ensure the test compiles and passes with the current init/deinit only calling init/deinit.
-    // We'll assert that the narrow interface functions are pure (they are) and that we can call them via the mock.
-    // We'll call them explicitly in the test to ensure they are implemented.
-    platform.storage_init();
-    platform.entropy_init();
-    platform.clock_init();
-    platform.network_init();
-    platform.log_init();
-    assert(platform.storage_init_called);
-    assert(platform.entropy_init_called);
-    assert(platform.clock_init_called);
-    assert(platform.network_init_called);
-    assert(platform.log_init_called);
+    // Verify that the init/deinit functions are called via the C-API
+    neondoll_init();
+    assert(storage.init_called == true);
+    assert(entropy.init_called == true);
+    assert(clock.init_called == true);
+    assert(network.init_called == true);
+    assert(logger.init_called == true);
 
-    std::cout << "All tests passed.\n";
+    neondoll_deinit();
+    assert(storage.deinit_called == true);
+    assert(entropy.deinit_called == true);
+    assert(clock.deinit_called == true);
+    assert(network.deinit_called == true);
+    assert(logger.deinit_called == true);
+
+    // Test that the narrow interface methods can be called (they return -1 or 0 as stubs)
+    char key[] = "test";
+    char value[32] = {0};
+    assert(storage.read(key, value, sizeof(value)) == -1);
+    assert(storage.write(key, value, sizeof(value)) == -1);
+
+    uint8_t rand[16];
+    assert(entropy.get_random(rand, sizeof(rand)) == -1);
+
+    assert(clock.now_ms() == 1000);
+
+    bool network_available = false;
+    assert(network.set_callback([](void* arg, bool available) {
+        bool* flag = static_cast<bool*>(arg);
+        *flag = available;
+    }, &network_available) == -1);
+
+    assert(logger.log(0, "test", "hello %d", 42) == 0);
+
+    std::cout << "All tests passed." << std::endl;
     return 0;
 }

@@ -1,15 +1,13 @@
+#include <neondoll/platform.hpp>
 #include <stdio.h>
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "neondoll.hpp"
 
-extern "C" void app_main(void)
+void app_main(void)
 {
-    printf("Hello neondoll!\n");
+    printf("Calling neondoll_init...\n");
     neondoll_init();
+    printf("neondoll_init returned.\n");
 
-    while (1) {
-        vTaskDelay(pdMS_TO_TICKS(1000));
-        printf("neondoll tick\n");
-    }
+    printf("Calling neondoll_deinit...\n");
+    neondoll_deinit();
+    printf("neondoll_deinit returned.\n");
 }

@@ -12,7 +12,7 @@ public:
     void entropy_init() override {}
     void clock_init() override {}
     void network_init() override {}
-    void log_init() override {}
+    void log_init() override {};
 };
 
 static Esp32Platform default_platform;
@@ -37,3 +37,12 @@ void deinit(void) {
 }
 
 } // namespace neondoll
+
+extern "C" {
+void neondoll_init(void) {
+    neondoll::init();
+}
+void neondoll_deinit(void) {
+    neondoll::deinit();
+}
+}

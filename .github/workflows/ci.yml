@@ -19,7 +19,6 @@ jobs:
       with:
         version: latest
         setup-method: stable
-        # Note: The timeout for the build step is handled separately
 
     - name: Build ESP-IDF Firmware
       working-directory: examples/minimal_body
@@ -36,7 +35,7 @@ jobs:
 
     - name: Build Host Test
       run: |
-        g++ -std=c++17 host_test/test_neondoll.cpp -o host_test/test_neondoll
+        g++ -std=c++17 -Icomponents/neondoll/include host_test/test_neondoll.cpp components/neondoll/src/neondoll.cpp -o host_test/test_neondoll
 
     - name: Run Host Test
       run: |

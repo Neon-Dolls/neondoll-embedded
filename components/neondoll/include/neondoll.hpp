@@ -2,13 +2,19 @@
 
 #ifdef __cplusplus
 #include <cstddef>
-#include "platform.hpp"
+#include "neondoll/platform.hpp"
+extern "C" {
+#endif
+
+void neondoll_init(void);
+void neondoll_deinit(void);
+
+#ifdef __cplusplus
+} // extern "C"
 
 namespace neondoll {
 
 void set_platform(Platform* platform);
-void init(void);
-void deinit(void);
 
 } // namespace neondoll
 #endif // __cplusplus

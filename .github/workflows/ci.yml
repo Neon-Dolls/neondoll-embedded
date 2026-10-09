@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [ master, '**' ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup ESP-IDF
+      uses: espressif/setup-esp-idf@v2
+      with:
+        version: latest
+        setup-method: stable
+        # Note: The timeout for the build step is handled separately
+
+    - name: Build ESP-IDF Firmware
+      working-directory: examples/minimal_body
+      run: |
+        . $IDF_PATH/export.sh
+        # Use a generous timeout for the build (WSL disk I/O can be slow)
+        timeout 1800 idf.py build
+
+    - name: Check ESP-IDF Build Artifacts
+      working-directory: examples/minimal_body/build
+      run: |
+        ls -lh minimal_body.elf minimal_body.bin
+        size minimal_body.elf
+
+    - name: Build Host Test
+      run: |
+        g++ -std=c++17 host_test/test_neondoll.cpp -o host_test/test_neondoll
+
+    - name: Run Host Test
+      run: |
+        host_test/test_neondoll

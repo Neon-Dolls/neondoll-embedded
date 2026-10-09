@@ -21,3 +21,15 @@ void deinit(void) {
 }
 
 } // namespace neondoll
+
+extern "C" {
+
+void neondoll_init(void) {
+    neondoll::init();
+}
+
+void neondoll_deinit(void) {
+    neondoll::deinit();
+}
+
+}

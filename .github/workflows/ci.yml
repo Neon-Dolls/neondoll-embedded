@@ -14,8 +14,8 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Setup ESP-IDF
-      uses: espressif/setup-esp-idf@v2
+    - name: Install ESP-IDF
+      uses: espressif/install-esp-idf-action@v2
       with:
         version: latest
         setup-method: stable

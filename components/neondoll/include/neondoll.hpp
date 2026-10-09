@@ -15,6 +15,8 @@ void neondoll_deinit(void);
 namespace neondoll {
 
 void set_platform(Platform* platform);
+void init();
+void deinit();
 
 } // namespace neondoll
 #endif // __cplusplus

@@ -1,8 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
-project(minimal_body)
-
-# Set extra component directories to include our custom component
-set(EXTRA_COMPONENT_DIRS ${PROJECT_PATH}/../components)
-
-# Include the ESP-IDF project manager
+message(STATUS "CMAKE_CURRENT_SOURCE_DIR: ${CMAKE_CURRENT_SOURCE_DIR}")
+set(EXTRA_COMPONENT_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/../../components)
+message(STATUS "EXTRA_COMPONENT_DIRS: ${EXTRA_COMPONENT_DIRS}")
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
+project(minimal_body)

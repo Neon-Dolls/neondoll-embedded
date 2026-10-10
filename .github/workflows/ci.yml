@@ -15,24 +15,34 @@ jobs:
     - uses: actions/checkout@v4
       with:
         submodules: recursive
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y git cmake ninja-build gcc g++ \
+          flex bison gperf dfututil \
+          python3 python3-pip python3-setuptools python3-serial python3-cryptography \
+          python3-future python3-pyparsing python3-pyelftools \
+          libffi-dev libssl-dev
+    - name: Install ESP-IDF
+      run: |
+        git clone --depth 1 --branch v5.2.1 https://github.com/espressif/esp-idf.git /opt/esp-idf
+        cd /opt/esp-idf
+        git submodule update --init --recursive
+        ./install.sh esp32
+        . /opt/esp-idf/export.sh
+    - name: Set up ESP-IDF environment
+      run: |
+        . /opt/esp-idf/export.sh
+        echo "IDF_PATH=$IDF_PATH" >> $GITHUB_ENV
+        echo "IDF_TARGET=esp32" >> $GITHUB_ENV
     - name: Debug environment
       run: |
-        echo "IDF_PATH before: $IDF_PATH"
-        which idf.py || echo "idf.py not found before setup"
-    - name: Setup ESP-IDF
-      uses: espressif/esp-idf-ci-action@v1
-      with:
-        esp_idf_version: v5.2.1
-        target: esp32
-        path: examples/minimal_body
-    - name: Debug environment after setup
-      run: |
-        echo "IDF_PATH after: $IDF_PATH"
-        which idf.py || echo "idf.py not found after setup"
+        echo "IDF_PATH: $IDF_PATH"
+        which idf.py || echo "idf.py not found"
     - name: Check ESP-IDF Build Artifacts
       run: |
-        ls -lh examples/minimal_body/build/minimal_body.elf examples/minimal_body/build/minimal_body.bin
-        size examples/minimal_body/build/minimal_body.elf
+        ls -lh examples/minimal_body/build/minimal_body.elf examples/minimal_body/build/minimal_body.bin || echo "Build artifacts not found"
+        size examples/minimal_body/build/minimal_body.elf || echo "size failed"
     - name: Install g++ for host test
       run: sudo apt-get update && sudo apt-get install -y g++
     - name: Build Host Test

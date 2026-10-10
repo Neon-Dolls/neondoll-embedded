@@ -157,44 +157,7 @@ extern "C" {
  *         -7: network init failed
  *         -8: logger init failed
  */
-inline int neondoll_init(neondoll::PlatformContext* ctx) {
-    if (!ctx) return -1;
-    if (!ctx->storage || !ctx->entropy || !ctx->clock || !ctx->network || !ctx->logger)
-        return -2;
-    if (ctx->initialized) return -3;
-
-    int ret = ctx->storage->init();
-    if (ret < 0) return -4;
-    ret = ctx->entropy->init();
-    if (ret < 0) {
-        ctx->storage->deinit();
-        return -5;
-    }
-    ret = ctx->clock->init();
-    if (ret < 0) {
-        ctx->entropy->deinit();
-        ctx->storage->deinit();
-        return -6;
-    }
-    ret = ctx->network->init();
-    if (ret < 0) {
-        ctx->clock->deinit();
-        ctx->entropy->deinit();
-        ctx->storage->deinit();
-        return -7;
-    }
-    ret = ctx->logger->init();
-    if (ret < 0) {
-        ctx->network->deinit();
-        ctx->clock->deinit();
-        ctx->entropy->deinit();
-        ctx->storage->deinit();
-        return -8;
-    }
-
-    ctx->initialized = true;
-    return 0;
-}
+int neondoll_init(neondoll::PlatformContext* ctx);
 
 /**
  * @brief Deinitialize the NeonDoll runtime.
@@ -209,24 +172,7 @@ inline int neondoll_init(neondoll::PlatformContext* ctx) {
  *         -6: network deinit failed
  *         -7: logger deinit failed
  */
-inline int neondoll_deinit(neondoll::PlatformContext* ctx) {
-    if (!ctx) return -1;
-    if (!ctx->initialized) return -2;
-
-    int ret = ctx->logger->deinit();
-    if (ret < 0) return -3;
-    ret = ctx->network->deinit();
-    if (ret < 0) return -4;
-    ret = ctx->clock->deinit();
-    if (ret < 0) return -5;
-    ret = ctx->entropy->deinit();
-    if (ret < 0) return -6;
-    ret = ctx->storage->deinit();
-    if (ret < 0) return -7;
-
-    ctx->initialized = false;
-    return 0;
-}
+int neondoll_deinit(neondoll::PlatformContext* ctx);
 
 #ifdef __cplusplus
 } // extern "C"

@@ -25,14 +25,16 @@ jobs:
           libffi-dev libssl-dev
     - name: Install ESP-IDF
       run: |
-        git clone --depth 1 --branch v5.2.1 https://github.com/espressif/esp-idf.git /opt/esp-idf
-        cd /opt/esp-idf
+        mkdir -p $HOME/esp-idf
+        cd $HOME/esp-idf
+        git clone --depth 1 --branch v5.2.1 https://github.com/espressif/esp-idf.git .
         git submodule update --init --recursive
         ./install.sh esp32
-        . /opt/esp-idf/export.sh
+        echo "IDF_PATH=$HOME/esp-idf" >> $GITHUB_ENV
+        echo "IDF_TARGET=esp32" >> $GITHUB_ENV
     - name: Set up ESP-IDF environment
       run: |
-        . /opt/esp-idf/export.sh
+        . $HOME/esp-idf/export.sh
         echo "IDF_PATH=$IDF_PATH" >> $GITHUB_ENV
         echo "IDF_TARGET=esp32" >> $GITHUB_ENV
     - name: Debug environment

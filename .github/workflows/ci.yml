@@ -53,12 +53,19 @@ jobs:
         ls -lh examples/minimal_body/build/minimal_body.elf examples/minimal_body/build/minimal_body.bin || echo "Build artifacts not found"
         size examples/minimal_body/build/minimal_body.elf || echo "size failed"
 
-    - name: Install g++ for host test
-      run: sudo apt-get update && sudo apt-get install -y g++
+    - name: Install dependencies for host test
+      run: sudo apt-get update && sudo apt-get install -y libgtest-dev cmake
+
+    - name: Build gtest
+      run: |
+        cd /usr/src/gtest
+        sudo cmake CMakeLists.txt
+        sudo make
+        sudo cp *.a /usr/lib
 
     - name: Build Host Test
       run: |
-        g++ -std=c++17 -Icomponents/neondoll/include host_test/test_neondoll.cpp components/neondoll/src/neondoll.cpp -o host_test/test_neondoll
+        g++ -std=c++17 -Icomponents/neondoll/include host_test/test_neondoll.cpp components/neondoll/src/neondoll.cpp -lgtest -lgtest_main -pthread -o host_test/test_neondoll
 
     - name: Run Host Test
       run: host_test/test_neondoll

@@ -9,72 +9,34 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 30
 
     steps:
     - uses: actions/checkout@v4
       with:
         submodules: recursive
-
-    - name: Cache ESP-IDF
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/.espressif
-          ~/esp-idf
-        key: esp-idf-${{ runner.os }}-v5.2.1-${{ hashFiles('.github/workflows/ci.yml') }}
-        restore-keys: |
-          esp-idf-${{ runner.os }}-v5.2.1-
-
-    - name: Install ESP-IDF
-      if: ${{ cache.outputs.cache-hit != 'true' }}
-      run: |
-        mkdir -p ~/esp-idf
-        cd ~/esp-idf
-        git clone --depth 1 --branch v5.2.1 https://github.com/espressif/esp-idf.git .
-        git submodule update --init --recursive
-        ./install.sh esp32
-        echo "IDF_PATH=$HOME/esp-idf" >> $GITHUB_ENV
-        echo "IDF_TARGET=esp32" >> $GITHUB_ENV
-
-    - name: Set up ESP-IDF environment
-      run: |
-        . $HOME/esp-idf/export.sh
-        echo "IDF_PATH=$IDF_PATH" >> $GITHUB_ENV
-        echo "IDF_TARGET=esp32" >> $GITHUB_ENV
-
     - name: Debug environment
       run: |
-        echo "IDF_PATH: $IDF_PATH"
-        which idf.py || echo "idf.py not found"
-        ls -la $HOME/esp-idf
-
-    - name: Build ESP-IDF project
+        echo "IDF_PATH before: $IDF_PATH"
+        which idf.py || echo "idf.py not found before setup"
+    - name: Setup ESP-IDF
+      uses: espressif/esp-idf-ci-action@v1
+      with:
+        esp_idf_version: latest
+        target: esp32
+        path: examples/minimal_body
+    - name: Debug environment after setup
       run: |
-        cd examples/minimal_body
-        # Clean previous build to avoid CMake cache issues
-        rm -rf build
-        idf.py reconfigure
-        idf.py build
-
+        echo "IDF_PATH after: $IDF_PATH"
+        which idf.py || echo "idf.py not found after setup"
     - name: Check ESP-IDF Build Artifacts
       run: |
-        ls -lh examples/minimal_body/build/minimal_body.elf examples/minimal_body/build/minimal_body.bin || echo "Build artifacts not found"
-        size examples/minimal_body/build/minimal_body.elf || echo "size failed"
-
-    - name: Install dependencies for host test
-      run: sudo apt-get update && sudo apt-get install -y libgtest-dev cmake
-
-    - name: Build gtest
-      run: |
-        cd /usr/src/gtest
-        sudo cmake CMakeLists.txt
-        sudo make
-        sudo cp *.a /usr/lib
-
+        ls -lh examples/minimal_body/build/minimal_body.elf examples/minimal_body/build/minimal_body.bin
+        size examples/minimal_body/build/minimal_body.elf
+    - name: Install g++ for host test
+      run: sudo apt-get update && sudo apt-get install -y g++
     - name: Build Host Test
       run: |
-        g++ -std=c++17 -Icomponents/neondoll/include host_test/test_neondoll.cpp components/neondoll/src/neondoll.cpp -lgtest -lgtest_main -pthread -o host_test/test_neondoll
-
+        g++ -std=c++17 -Icomponents/neondoll/include host_test/test_neondoll.cpp components/neondoll/src/neondoll.cpp -o host_test/test_neondoll
     - name: Run Host Test
       run: host_test/test_neondoll

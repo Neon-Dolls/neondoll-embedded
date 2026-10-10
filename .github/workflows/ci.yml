@@ -32,7 +32,7 @@ jobs:
         mkdir -p ~/esp-idf
         cd ~/esp-idf
         git clone --depth 1 --branch v5.2.1 https://github.com/espressif/esp-idf.git .
-        git submodule update --init --recursive --depth 1 --jobs 4
+        git submodule update --init --recursive
         ./install.sh esp32
         echo "IDF_PATH=$HOME/esp-idf" >> $GITHUB_ENV
         echo "IDF_TARGET=esp32" >> $GITHUB_ENV
@@ -47,6 +47,15 @@ jobs:
       run: |
         echo "IDF_PATH: $IDF_PATH"
         which idf.py || echo "idf.py not found"
+        ls -la $HOME/esp-idf
+
+    - name: Build ESP-IDF project
+      run: |
+        cd examples/minimal_body
+        # Clean previous build to avoid CMake cache issues
+        rm -rf build
+        idf.py reconfigure
+        idf.py build
 
     - name: Check ESP-IDF Build Artifacts
       run: |

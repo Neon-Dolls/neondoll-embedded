@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <neondoll/platform.hpp>
+#include <neondoll/identity.hpp>
+#include <neondoll/identity_storage.hpp>
 
 namespace neondoll {
 
@@ -9,6 +11,23 @@ namespace neondoll {
 
 extern "C" {
 
+/** @brief Initialize the NeonDoll runtime with explicit platform dependencies.
+ *         Caller owns the PlatformContext and platform objects.
+ * @param ctx   Platform context containing non-owning pointers to platform objects.
+ *              Must remain valid for the lifetime of the NeonDoll runtime.
+ * @return 0 on success, negative error code on failure.
+ *         On failure, any successfully initialized platforms are cleaned up.
+ *         -1: null context
+ *         -2: any platform pointer is null
+ *         -3: already initialized
+ *         -4: storage init failed
+ *         -5: entropy init failed
+ *         -6: clock init failed
+ *         -7: network init failed
+ *         -8: logger init failed
+ *         -9: identity storage init failed
+ *         -10: failed to load or create identity
+ */
 int neondoll_init(neondoll::PlatformContext* ctx) {
     if (!ctx) {
         return -1; // null context
@@ -56,6 +75,57 @@ int neondoll_init(neondoll::PlatformContext* ctx) {
         ctx->entropy->deinit();
         ctx->storage->deinit();
         return -8; // logger init failed
+    }
+    
+    // Initialize identity after basic platforms are up
+    // Using a fixed storage key for identity - in a real system this might be configurable
+    constexpr const char* IDENTITY_STORAGE_KEY = "neondoll/identity";
+    
+    neondoll::IdentityState identity_state;
+    ret = neondoll::load_identity(ctx->storage, IDENTITY_STORAGE_KEY, identity_state);
+    if (ret == 0) {
+        // Successfully loaded existing identity - validation passed
+        // Identity is now ready for use by the application
+    } else if (ret == -3) {
+        // Key not found - first boot, create new identity
+        neondoll::BodyMetadata meta{
+            .implementation = "neondoll-embedded",
+            .platform = "",   // Will be filled by platform-specific code if needed
+            .arch = ""        // Will be filled by platform-specific code if needed
+        };
+        
+        ret = neondoll::new_identity_state(ctx->entropy, "", meta, identity_state);
+        if (ret != 0) {
+            // Clean up initialized platforms on failure
+            ctx->logger->deinit();
+            ctx->network->deinit();
+            ctx->clock->deinit();
+            ctx->entropy->deinit();
+            ctx->storage->deinit();
+            return -10; // failed to create identity
+        }
+        
+        // Persist the new identity
+        ret = neondoll::save_identity(ctx->storage, IDENTITY_STORAGE_KEY, identity_state);
+        if (ret != 0) {
+            // Clean up initialized platforms on failure
+            ctx->logger->deinit();
+            ctx->network->deinit();
+            ctx->clock->deinit();
+            ctx->entropy->deinit();
+            ctx->storage->deinit();
+            return -10; // failed to save identity
+        }
+        // Identity created and persisted successfully
+    } else {
+        // Failed to load identity due to corruption, version mismatch, or I/O error
+        // Clean up initialized platforms
+        ctx->logger->deinit();
+        ctx->network->deinit();
+        ctx->clock->deinit();
+        ctx->entropy->deinit();
+        ctx->storage->deinit();
+        return -10; // failed to load or create identity (propagate specific error from load_identity)
     }
     
     ctx->initialized = true;

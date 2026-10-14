@@ -13,22 +13,12 @@ int generate_body_id(EntropySource* entropy, BodyID& out) {
         return -1; // null entropy pointer
     }
 
-    // Initialize entropy source
-    int ret = entropy->init();
-    if (ret != 0) {
-        return -2; // entropy init failed
-    }
-
     // Generate 16 random bytes (128 bits of entropy)
     std::array<uint8_t, 16> buf{};
-    ret = entropy->get_random(buf.data(), buf.size());
+    int ret = entropy->get_random(buf.data(), buf.size());
     if (ret < 0) {
-        entropy->deinit(); // Clean up on failure
         return -3; // failed to get random bytes
     }
-
-    // Deinitialize entropy source
-    entropy->deinit();
 
     // Create BodyID as hex encoding (32 characters for 16 bytes)
     static const char hex_chars[] = "0123456789abcdef";
@@ -62,7 +52,7 @@ int new_identity_state(EntropySource* entropy,
     out.identity.meta = meta; // copy metadata
     out.identity.counter = 0; // Initialize counter to 0
     out.identity.timestamp = 0; // Initialize timestamp to 0 (will be set by caller if needed)
-    out.identity.signature = std::string(64, '0'); // Initialize signature to 64 zeros
+    out.identity.signature = ""; // Signature is validated during loading, not pre-initialized
 
     return 0; // success
 }

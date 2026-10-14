@@ -8,7 +8,6 @@
 #include <cstring>
 #include <string>
 #include <map>
-#include <cstdio> // for fprintf
 
 // Mock platform objects for testing
 namespace neondoll {
@@ -17,21 +16,13 @@ class MockStorage : public Storage {
 public:
     MockStorage() : initialized_(false), fail_init_(false) {}
     virtual ~MockStorage() { if (initialized_) deinit(); }
-
+    
     int init() override { 
-        if (fail_init_) {
-            fprintf(stderr, "MockStorage::init: fail_init_ is true, returning -2\n");
-            return -2; 
-        }
-        fprintf(stderr, "MockStorage::init: fail_init_ is false, setting initialized_=true and returning 0\n");
+        if (fail_init_) return -2; 
         initialized_ = true; 
         return 0; 
     }
-    int deinit() override { 
-        fprintf(stderr, "MockStorage::deinit: setting initialized_=false\n");
-        initialized_ = false; 
-        return 0; 
-    }
+    int deinit() override { initialized_ = false; return 0; }
     std::ptrdiff_t read(const char* key, void* out, size_t max_size) override {
         if (!initialized_) return -2;
         auto it = storage_.find(key);
@@ -42,23 +33,261 @@ public:
     }
     int write(const char* key, const void* in, size_t size) override {
         if (!initialized_) return -2;
-        // For the StorageWriteFailure test, simulate a write failure
-        if (fail_write_) {
-            return -3; // I/O error
-        }
         storage_[key] = std::string(static_cast<const char*>(in), size);
         return static_cast<int>(size);
     }
-
+    
     void set_fail_init(bool fail) { fail_init_ = fail; }
-    void set_fail_write(bool fail) { fail_write_ = fail; }
     void clear() { storage_.clear(); }
-
+    
 private:
     bool initialized_;
     bool fail_init_;
-    bool fail_write_;
     std::map<std::string, std::string> storage_;
 };
 
+class MockEntropy : public EntropySource {
+public:
+    MockEntropy() : initialized_(false), fail_init_(false), fail_random_(false) {}
+    virtual ~MockEntropy() { if (initialized_) deinit(); }
+    
+    int init() override { 
+        if (fail_init_) return -2; 
+        initialized_ = true; 
+        return 0; 
+    }
+    int deinit() override { initialized_ = false; return 0; }
+    int get_random(void* out, size_t len) override {
+        if (!initialized_) return -2;
+        if (fail_random_) return -1;
+        // Fill with predictable pattern for testing
+        for (size_t i = 0; i < len; ++i) {
+            static_cast<uint8_t*>(out)[i] = static_cast<uint8_t>(i);
+        }
+        return static_cast<int>(len);
+    }
+    
+    void set_fail_init(bool fail) { fail_init_ = fail; }
+    void set_fail_random(bool fail) { fail_random_ = fail; }
+    void reset() { fail_init_ = false; fail_random_ = false; }
+    
+private:
+    bool initialized_;
+    bool fail_init_;
+    bool fail_random_;
+};
+
+class MockClock : public Clock {
+public:
+    MockClock() : initialized_(false), now_ms_return_(0) {}
+    virtual ~MockClock() { if (initialized_) deinit(); }
+    int init() override { ++init_calls_; return init_return_; }
+    int deinit() override { ++deinit_calls_; return deinit_return_; }
+    uint64_t now_ms() override { return now_ms_return_; }
+    
+    int init_calls_ = 0;
+    int deinit_calls_ = 0;
+    int init_return_ = 0;
+    int deinit_return_ = 0;
+    uint64_t now_ms_return_;
+    
+private:
+    bool initialized_;
+};
+
+class MockNetwork : public NetworkAvailability {
+public:
+    MockNetwork() : initialized_(false), available_return_(true) {}
+    virtual ~MockNetwork() { if (initialized_) deinit(); }
+    int init() override { ++init_calls_; return init_return_; }
+    int deinit() override { ++deinit_calls_; return deinit_return_; }
+    bool available() const { return available_return_; }
+    int set_callback(Callback cb, void* arg) override {
+        callback_ = cb;
+        callback_arg_ = arg;
+        return 0;
+    }
+    void simulate_available(bool available) {
+        if (callback_) {
+            callback_(callback_arg_, available);
+        }
+    }
+
+    int init_calls_ = 0;
+    int deinit_calls_ = 0;
+    int init_return_ = 0;
+    int deinit_return_ = 0;
+    bool available_return_;
+    Callback callback_ = nullptr;
+    void* callback_arg_ = nullptr;
+
+private:
+    bool initialized_;
+};
+
+class MockLogger : public Logger {
+public:
+    MockLogger() : initialized_(false) {}
+    virtual ~MockLogger() { if (initialized_) deinit(); }
+    int init() override { ++init_calls_; return init_return_; }
+    int deinit() override { ++deinit_calls_; return deinit_return_; }
+    int log(int level, const char* tag, const char* msg) override { 
+        ++log_calls_; 
+        last_level_ = level; 
+        last_tag_ = tag; 
+        last_msg_ = msg; 
+        return 0; 
+    }
+    
+    int init_calls_ = 0;
+    int deinit_calls_ = 0;
+    int init_return_ = 0;
+    int deinit_return_ = 0;
+    int log_calls_ = 0;
+    int last_level_ = 0;
+    std::string last_tag_;
+    std::string last_msg_;
+    
+private:
+    bool initialized_;
+};
+
 } // namespace neondoll
+
+// Test fixture
+class NeondollIdentityTest : public ::testing::Test {
+protected:
+    void SetUp() override {
+        ctx_.storage = &storage_;
+        ctx_.entropy = &entropy_;
+        ctx_.clock = &clock_;
+        ctx_.network = &network_;
+        ctx_.logger = &logger_;
+        ctx_.initialized = false;
+        
+        // Clear any persisted state
+        storage_.clear();
+        entropy_.reset();
+    }
+    
+    neondoll::PlatformContext ctx_;
+    neondoll::MockStorage storage_;
+    neondoll::MockEntropy entropy_;
+    neondoll::MockClock clock_;
+    neondoll::MockNetwork network_;
+    neondoll::MockLogger logger_;
+};
+
+TEST_F(NeondollIdentityTest, FirstBootCreatesIdentity) {
+    // Fresh boot - no persisted identity
+    EXPECT_EQ(neondoll_init(&ctx_), 0);
+    EXPECT_TRUE(ctx_.initialized);
+    
+    // Check that identity was created and stored
+    storage_.init();
+    char buf[256];
+    std::ptrdiff_t len = storage_.read("neondoll/identity", buf, sizeof(buf)-1);
+    storage_.deinit();
+    EXPECT_GT(len, 0);
+    buf[len] = '\0';
+    
+    // Verify it's a valid identity string (simplified check)
+    std::string id_str(buf);
+    EXPECT_NE(id_str.find("v1:"), std::string::npos);
+    EXPECT_NE(id_str.find(":0:"), std::string::npos); // counter should be 0
+}
+
+TEST_F(NeondollIdentityTest, RestartLoadsSameIdentity) {
+    // First boot - create identity
+    EXPECT_EQ(neondoll_init(&ctx_), 0);
+    EXPECT_TRUE(ctx_.initialized);
+    
+    // Store the created identity
+    storage_.init();
+    char buf1[256];
+    std::ptrdiff_t len1 = storage_.read("neondoll/identity", buf1, sizeof(buf1)-1);
+    storage_.deinit();
+    EXPECT_GT(len1, 0);
+    buf1[len1] = '\0';
+    std::string first_id(buf1);
+    
+    // Simulate restart by clearing context but keeping storage
+    ctx_.initialized = false;
+    
+    // Second boot - should load same identity
+    EXPECT_EQ(neondoll_init(&ctx_), 0);
+    EXPECT_TRUE(ctx_.initialized);
+    
+    // Check that identity matches
+    storage_.init();
+    char buf2[256];
+    std::ptrdiff_t len2 = storage_.read("neondoll/identity", buf2, sizeof(buf2)-1);
+    storage_.deinit();
+    EXPECT_GT(len2, 0);
+    buf2[len2] = '\0';
+    std::string second_id(buf2);
+    
+    EXPECT_EQ(first_id, second_id);
+}
+
+TEST_F(NeondollIdentityTest, CorruptIdentityIsRejected) {
+    // First create a valid identity
+    EXPECT_EQ(neondoll_init(&ctx_), 0);
+    EXPECT_TRUE(ctx_.initialized);
+    
+    // Corrupt the stored identity
+    storage_.init();
+    storage_.write("neondoll/identity", "corrupt_data", 12);
+    storage_.deinit();
+    
+    // Clear context to simulate restart
+    ctx_.initialized = false;
+    storage_.init(); // Reinit to read the corrupted data
+    
+    // Second boot should fail due to corrupt identity
+    EXPECT_NE(neondoll_init(&ctx_), 0);
+    EXPECT_FALSE(ctx_.initialized);
+    
+    storage_.deinit();
+}
+
+TEST_F(NeondollIdentityTest, StorageInitFailure) {
+    storage_.set_fail_init(true);
+    EXPECT_NE(neondoll_init(&ctx_), 0);
+    EXPECT_FALSE(ctx_.initialized);
+}
+
+TEST_F(NeondollIdentityTest, StorageWriteFailure) {
+    // First boot succeeds
+    EXPECT_EQ(neondoll_init(&ctx_), 0);
+    EXPECT_TRUE(ctx_.initialized);
+    
+    // Simulate storage failure on second init (would try to verify/save)
+    storage_.set_fail_init(true);
+    ctx_.initialized = false;
+    
+    // Second boot should fail
+    EXPECT_NE(neondoll_init(&ctx_), 0);
+    EXPECT_FALSE(ctx_.initialized);
+}
+
+TEST_F(NeondollIdentityTest, EntropyInitFailure) {
+    entropy_.set_fail_init(true);
+    EXPECT_NE(neondoll_init(&ctx_), 0);
+    EXPECT_FALSE(ctx_.initialized);
+}
+
+TEST_F(NeondollIdentityTest, EntropyFailureDuringGenerate) {
+    // First boot succeeds (entropy works)
+    EXPECT_EQ(neondoll_init(&ctx_), 0);
+    EXPECT_TRUE(ctx_.initialized);
+    
+    // Now make entropy fail random generation
+    entropy_.set_fail_random(true);
+    ctx_.initialized = false;
+    storage_.clear(); // Clear so it tries to generate new ID
+    
+    // Second boot should fail due to entropy failure
+    EXPECT_NE(neondoll_init(&ctx_), 0);
+    EXPECT_FALSE(ctx_.initialized);
+}

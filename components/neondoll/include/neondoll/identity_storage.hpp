@@ -42,6 +42,10 @@ int save_identity(Storage* storage,
                  const std::string& key,
                  const IdentityState& identity);
 
+// For testing only
+bool parse_identity(const std::string& data, IdentityState& state);
+std::string format_identity(const IdentityState& identity);
+
 } // namespace neondoll
 
 #endif // NEONDOLL_IDENTITY_STORAGE_HPP

@@ -41,6 +41,9 @@ struct BodyIdentity {
     BodyID body_id;              ///< Opaque Body ID (e.g., "body_"+16-byte-hex)
     std::string name;            ///< Optional human-readable name
     BodyMetadata meta;           ///< Implementation/platform/arch metadata
+    uint64_t counter;            ///< Monotonically increasing counter for identity versions
+    uint64_t timestamp;          ///< Timestamp of identity creation/update
+    std::string signature;       ///< Cryptographic signature of the identity (64 hex chars)
 };
 
 /** @brief Current format version of the persistable identity envelope.

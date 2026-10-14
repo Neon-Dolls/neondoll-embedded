@@ -1,0 +1,5 @@
+/usr/bin/ld: /tmp/ccu6wd6D.o: in function `main':
+test_neondoll.cpp:(.text+0x24): undefined reference to `neondoll::set_platform(neondoll::Platform*)'
+/usr/bin/ld: test_neondoll.cpp:(.text+0x29): undefined reference to `neondoll::init()'
+/usr/bin/ld: test_neondoll.cpp:(.text+0x2e): undefined reference to `neondoll::deinit()'
+collect2: error: ld returned 1 exit status

@@ -6,7 +6,7 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <neondoll/identity.hpp>
+#include <neondoll/identity_state.hpp>
 
 namespace neondoll {
 

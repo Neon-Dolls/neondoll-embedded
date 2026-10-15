@@ -18,6 +18,9 @@ class Clock;
 class NetworkAvailability;
 class Logger;
 
+// Forward declaration of IdentityState to break circular dependency with identity_state.hpp
+struct IdentityState;
+
 /** @brief Opaque Body identifier - independent of process, connection, session, etc. */
 using BodyID = std::string;
 
@@ -56,14 +59,6 @@ struct BodyIdentity {
  *         Bump this (and teach load_identity/save_identity) before changing shape.
  */
 constexpr int CURRENT_IDENTITY_VERSION = 1;
-
-/** @brief Persistable form of Body identity with versioning envelope.
- *         Allows runtime to evolve file format without changing wire shape.
- */
-struct IdentityState {
-    int version;                 ///< Format version
-    BodyIdentity identity;       ///< The actual identity data
-};
 
 /** @brief Builds a fresh identity state with new Body ID and given metadata/name.
  *  @param entropy  Entropy source for generating the Body ID

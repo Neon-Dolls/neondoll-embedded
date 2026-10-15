@@ -46,6 +46,7 @@ static bool parse_hex_string_fixed(const std::string& data, size_t& pos, size_t 
 // Helper to parse a decimal number (unsigned)
 // Returns true if successful, false otherwise.
 // On success, advances pos past the number and sets out to the parsed value.
+// Includes overflow protection for uint64_t.
 static bool parse_decimal(const std::string& data, size_t& pos, uint64_t& out) {
     size_t start = pos;
     while (pos < data.size() && std::isdigit(data[pos])) {
@@ -56,7 +57,10 @@ static bool parse_decimal(const std::string& data, size_t& pos, uint64_t& out) {
     }
     out = 0;
     for (size_t i = start; i < pos; ++i) {
-        // Check for overflow? We assume the values are small enough for uint64_t.
+        // Check for overflow before multiplying and adding
+        if (out > (UINT64_MAX - (data[i] - '0')) / 10) {
+            return false; // overflow would occur
+        }
         out = out * 10 + (data[i] - '0');
     }
     return true;
@@ -160,7 +164,7 @@ int load_identity(Storage* storage,
 
     if (bytes_read < 0) {
         if (bytes_read == -1) {
-            return -3; // key not found in storage
+            return -3; // key not found (genuinely missing key - permits first boot)
         } else {
             return -6; // storage read I/O error
         }
@@ -169,9 +173,9 @@ int load_identity(Storage* storage,
     // Resize buffer to actual data read
     buffer.resize(static_cast<size_t>(bytes_read));
 
-    // Treat empty buffer as missing key (first boot)
+    // Treat empty buffer as corrupt data (never first boot)
     if (buffer.empty()) {
-        return -3; // key not found in storage
+        return -4; // persisted data is corrupt or incomplete
     }
 
     // Parse the identity data

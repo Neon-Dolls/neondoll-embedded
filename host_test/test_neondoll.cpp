@@ -363,4 +363,94 @@ TEST(NeondollLifecycleTest, AlreadyInitialized) {
     EXPECT_FALSE(ctx.initialized);
 }
 
+
+
+TEST(NeondollLifecycleTest, FirstBootPersistDeinitRestartIdenticalBodyID) {
+    neondoll::PlatformContext ctx1, ctx2;
+    MockStorage storage;
+    MockEntropy entropy;
+    MockClock clock;
+    MockNetwork network;
+    MockLogger logger;
+
+    // Use the same storage instance for both contexts to simulate persistence
+    ctx1.storage = &storage; ctx1.entropy = &entropy; ctx1.clock = &clock; ctx1.network = &network; ctx1.logger = &logger;
+    ctx2.storage = &storage; ctx2.entropy = &entropy; ctx2.clock = &clock; ctx2.network = &network; ctx2.logger = &logger;
+
+    // First boot - create and persist identity
+    EXPECT_EQ(neondoll_init(&ctx1), 0);
+    EXPECT_TRUE(ctx1.initialized);
+    const neondoll::IdentityState* identity1 = neondoll_get_identity(&ctx1);
+    ASSERT_NE(identity1, nullptr);
+    std::string first_body_id = identity1->identity.body_id;
+    EXPECT_FALSE(first_body_id.empty());
+
+    // Persist by deiniting (which should save via neondoll_init's logic on first boot)
+    EXPECT_EQ(neondoll_deinit(&ctx1), 0);
+    EXPECT_FALSE(ctx1.initialized);
+
+    // Second boot - restart and load identical identity
+    EXPECT_EQ(neondoll_init(&ctx2), 0);
+    EXPECT_TRUE(ctx2.initialized);
+    const neondoll::IdentityState* identity2 = neondoll_get_identity(&ctx2);
+    ASSERT_NE(identity2, nullptr);
+    std::string second_body_id = identity2->identity.body_id;
+    EXPECT_FALSE(second_body_id.empty());
+    EXPECT_EQ(first_body_id, second_body_id) << "Body ID should persist across deinit/init cycle";
+
+    // Clean up
+    EXPECT_EQ(neondoll_deinit(&ctx2), 0);
+    EXPECT_FALSE(ctx2.initialized);
+}
+
+TEST(NeondollLifecycleTest, CorruptRecordIsRejectedWithoutReplacement) {
+    neondoll::PlatformContext ctx;
+    MockStorage storage;
+    MockEntropy entropy;
+    MockClock clock;
+    MockNetwork network;
+    MockLogger logger;
+
+    ctx.storage = &storage; ctx.entropy = &entropy; ctx.clock = &clock; ctx.network = &network; ctx.logger = &logger;
+
+    // First boot - create identity
+    EXPECT_EQ(neondoll_init(&ctx), 0);
+    EXPECT_TRUE(ctx.initialized);
+    const neondoll::IdentityState* identity1 = neondoll_get_identity(&ctx);
+    ASSERT_NE(identity1, nullptr);
+    std::string first_body_id = identity1->identity.body_id;
+    EXPECT_FALSE(first_body_id.empty());
+
+    // Corrupt the persisted identity by writing invalid data
+    storage.read_return = 0;   // allow reading from the storage map
+    storage.read_return = 21;  // size of corrupt data without quotes
+    storage.storage_["neondoll/identity"] = "invalid!@#$%^&*()data";
+
+    // Deinit and restart with corrupted data
+    EXPECT_EQ(neondoll_deinit(&ctx), 0);
+    EXPECT_FALSE(ctx.initialized);
+
+    // Second boot should fail to load corrupted identity (reject without replacement)
+    EXPECT_EQ(neondoll_init(&ctx), -10); // failed to load or create identity
+    EXPECT_FALSE(ctx.initialized);
+
+    // Third boot should also fail to load corrupted identity (still corrupt, no replacement)
+    EXPECT_EQ(neondoll_init(&ctx), -10);
+    EXPECT_FALSE(ctx.initialized);
+
+    // Now, if we remove the corrupt record (simulate missing key), we should get a new identity
+    storage.storage_.erase("neondoll/identity");
+    EXPECT_EQ(neondoll_deinit(&ctx), -2);   // deinit uninitialized context
+    EXPECT_FALSE(ctx.initialized);
+    EXPECT_EQ(neondoll_init(&ctx), 0);
+    EXPECT_TRUE(ctx.initialized);
+    const neondoll::IdentityState* identity3 = neondoll_get_identity(&ctx);
+    ASSERT_NE(identity3, nullptr);
+    std::string third_body_id = identity3->identity.body_id;
+    EXPECT_FALSE(third_body_id.empty());
+    EXPECT_EQ(neondoll_deinit(&ctx), 0);
+    EXPECT_FALSE(ctx.initialized);
+}
+
+
 } // namespace

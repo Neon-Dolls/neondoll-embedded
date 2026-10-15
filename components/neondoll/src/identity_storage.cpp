@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <neondoll/identity_storage.hpp>
+#include <neondoll/platform.hpp>
 #include <neondoll/identity.hpp>
 #include <sstream>
 #include <iomanip>
@@ -84,7 +85,8 @@ static std::string format_hex(const uint8_t* data, size_t len) {
     return ss.str();
 }
 
-// Parse identity from colon-separated string: v1:{body_id_hex}:{counter}:{timestamp}:{signature_hex}
+// Parse identity from colon-separated string: v1:{body_id_hex}:{counter}:{timestamp}
+// Parse identity from colon-separated string: v1:{body_id_hex}:{counter}:{timestamp}
 bool parse_identity(const std::string& data, IdentityState& state) {
     size_t pos = 0;
 
@@ -121,18 +123,7 @@ bool parse_identity(const std::string& data, IdentityState& state) {
         return false;
     }
 
-    // Expect colon
-    if (pos >= data.size() || data[pos] != ':') {
-        return false;
-    }
-    ++pos;
-
-    // Parse signature_hex: 64 hex characters (32 bytes)
-    if (!parse_hex_string_fixed(data, pos, 64, state.identity.signature)) {
-        return false;
-    }
-
-    // Expect end of string
+    // Expect end of string (no signature field anymore)
     if (pos != data.size()) {
         return false;
     }
@@ -143,15 +134,15 @@ bool parse_identity(const std::string& data, IdentityState& state) {
     return true;
 }
 
-// Format identity to colon-separated string: v1:{body_id_hex}:{counter}:{timestamp}:{signature_hex}
+// Format identity to colon-separated string: v1:{body_id_hex}:{counter}:{timestamp}
+// Format identity to colon-separated string: v1:{body_id_hex}:{counter}:{timestamp}
 std::string format_identity(const IdentityState& identity) {
     std::stringstream ss;
     ss << std::hex << std::setfill('0');
     ss << "v1:"
        << std::setw(32) << identity.identity.body_id << ":"
        << std::dec << identity.identity.counter << ":"
-       << std::dec << identity.identity.timestamp << ":"
-       << std::hex << std::setw(64) << identity.identity.signature;
+       << std::dec << identity.identity.timestamp;
     return ss.str();
 }
 

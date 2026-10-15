@@ -8,9 +8,15 @@
 #include <cstdint>
 #include <string>
 #include <array>
-#include "platform.hpp"
 
 namespace neondoll {
+
+// Forward declarations of platform interfaces to break circular dependency
+class EntropySource;
+class Storage;
+class Clock;
+class NetworkAvailability;
+class Logger;
 
 /** @brief Opaque Body identifier - independent of process, connection, session, etc. */
 using BodyID = std::string;

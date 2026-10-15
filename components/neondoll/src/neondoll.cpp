@@ -58,8 +58,8 @@ int neondoll_init(neondoll::PlatformContext* ctx) {
     // Using a fixed storage key for identity - in a real system this might be configurable
     constexpr const char* IDENTITY_STORAGE_KEY = "neondoll/identity";
 
-    neondoll::IdentityState identity_state;
-    ret = neondoll::load_identity(ctx->storage, IDENTITY_STORAGE_KEY, identity_state);
+    // Use the identity_state in the PlatformContext for persistence across init/deinit
+    ret = neondoll::load_identity(ctx->storage, IDENTITY_STORAGE_KEY, ctx->identity_state);
     if (ret == 0) {
         // Successfully loaded existing identity - validation passed
         // Identity is now ready for use by the application
@@ -71,7 +71,7 @@ int neondoll_init(neondoll::PlatformContext* ctx) {
             .arch = ""        // Will be filled by platform-specific code if needed
         };
 
-        ret = neondoll::new_identity_state(ctx->entropy, "", meta, identity_state);
+        ret = neondoll::new_identity_state(ctx->entropy, "", meta, ctx->identity_state);
         if (ret != 0) {
             // Clean up initialized platforms on failure
             ctx->logger->deinit();
@@ -83,7 +83,7 @@ int neondoll_init(neondoll::PlatformContext* ctx) {
         }
 
         // Persist the new identity
-        ret = neondoll::save_identity(ctx->storage, IDENTITY_STORAGE_KEY, identity_state);
+        ret = neondoll::save_identity(ctx->storage, IDENTITY_STORAGE_KEY, ctx->identity_state);
         if (ret != 0) {
             // Clean up initialized platforms on failure
             ctx->logger->deinit();
@@ -96,15 +96,16 @@ int neondoll_init(neondoll::PlatformContext* ctx) {
         // Identity created and persisted successfully
     } else {
         // Failed to load identity due to corruption, version mismatch, or I/O error
+        // Reject without generating a replacement (per M1.1 requirement)
         // Clean up initialized platforms
         ctx->logger->deinit();
         ctx->network->deinit();
         ctx->clock->deinit();
         ctx->entropy->deinit();
         ctx->storage->deinit();
-        return -10; // failed to load or create identity (propagate specific error from load_identity)
+        // Propagate the error from load_identity
+        return -10;  // failed to load identity (corrupt, version mismatch, or I/O error)
     }
-
     ctx->initialized = true;
     return 0;
 }
@@ -146,4 +147,11 @@ int neondoll_deinit(neondoll::PlatformContext* ctx) {
 
     ctx->initialized = false;
     return 0;
+}
+
+const neondoll::IdentityState* neondoll_get_identity(const neondoll::PlatformContext* ctx) {
+    if (!ctx || !ctx->initialized) {
+        return nullptr;
+    }
+    return &ctx->identity_state;
 }

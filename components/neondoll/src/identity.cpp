@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <neondoll/identity.hpp>
+#include <neondoll/platform.hpp>
 #include <cstring> // for memcpy
 #include <cstdint>
 #include <array>

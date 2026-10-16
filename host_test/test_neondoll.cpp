@@ -8,32 +8,79 @@ namespace {
 
 class MockStorage : public neondoll::Storage {
 public:
-    int init_calls = 0;
-    int deinit_calls = 0;
-    int init_return = 0;
-    int deinit_return = 0;
-    std::ptrdiff_t read_return = -1;
-    int write_return = -1;
-
+    MockStorage() : init_calls(0), deinit_calls(0), read_calls(0), write_calls(0),
+                       init_return(0), deinit_return(0), read_return(-1), write_return(0) {}
     int init() override { ++init_calls; return init_return; }
     int deinit() override { ++deinit_calls; return deinit_return; }
-    std::ptrdiff_t read(const char* key, void* out, size_t max_size) override { return read_return; }
-    int write(const char* key, const void* in, size_t size) override { return write_return; }
-};
+    std::ptrdiff_t read(const char* key, void* out, size_t max_size) override {
+        ++read_calls;
+        if (read_return < 0) {
+            return read_return;
+        }
+        auto it = storage_.find(key);
+        if (it == storage_.end()) {
+            return -1;
+        }
+        if (it->second.size() > max_size) {
+            return -2; // buffer too small
+        }
+        memcpy(out, it->second.data(), it->second.size());
+        return static_cast<std::ptrdiff_t>(it->second.size());
+    }
+    int write(const char* key, const void* in, size_t size) override {
+        ++write_calls;
+        if (write_return < 0) {
+            return write_return;
+        }
+        storage_[key] = std::string(static_cast<const char*>(in), size);
+        return 0; // success
+    }
 
+    void set_fail_init(bool fail) { fail_init_ = fail; }
+    void set_fail_random(bool fail) { fail_random_ = fail; }
+
+public: // Test accessors
+    int init_calls;
+    int deinit_calls;
+    int read_calls;
+    int write_calls;
+    int init_return;
+    int deinit_return;
+    std::ptrdiff_t read_return;
+    int write_return;
+    bool fail_init_;
+    bool fail_random_;
+    std::map<std::string, std::string> storage_;
+};
 class MockEntropy : public neondoll::EntropySource {
 public:
-    int init_calls = 0;
-    int deinit_calls = 0;
-    int init_return = 0;
-    int deinit_return = 0;
-    int get_random_return = -1;
-
+    MockEntropy() : init_calls(0), deinit_calls(0), get_random_calls(0),
+                       init_return(0), deinit_return(0), get_random_return(0) {}
     int init() override { ++init_calls; return init_return; }
     int deinit() override { ++deinit_calls; return deinit_return; }
-    int get_random(void* out, size_t len) override { return get_random_return; }
-};
+    int get_random(void* out, size_t len) override {
+        ++get_random_calls;
+        if (get_random_return < 0) {
+            return get_random_return;
+        }
+        // Fill buffer with a fixed pattern (0xAA) for testing
+        memset(out, 0xAA, len);
+        return static_cast<int>(len);
+    }
 
+    void set_fail_init(bool fail) { fail_init_ = fail; }
+    void set_fail_random(bool fail) { fail_random_ = fail; }
+
+public: // Test accessors
+    int init_calls;
+    int deinit_calls;
+    int get_random_calls;
+    int init_return;
+    int deinit_return;
+    int get_random_return;
+    bool fail_init_;
+    bool fail_random_;
+};
 class MockClock : public neondoll::Clock {
 public:
     int init_calls = 0;
@@ -315,5 +362,95 @@ TEST(NeondollLifecycleTest, AlreadyInitialized) {
     EXPECT_EQ(neondoll_deinit(&ctx), 0);
     EXPECT_FALSE(ctx.initialized);
 }
+
+
+
+TEST(NeondollLifecycleTest, FirstBootPersistDeinitRestartIdenticalBodyID) {
+    neondoll::PlatformContext ctx1, ctx2;
+    MockStorage storage;
+    MockEntropy entropy;
+    MockClock clock;
+    MockNetwork network;
+    MockLogger logger;
+
+    // Use the same storage instance for both contexts to simulate persistence
+    ctx1.storage = &storage; ctx1.entropy = &entropy; ctx1.clock = &clock; ctx1.network = &network; ctx1.logger = &logger;
+    ctx2.storage = &storage; ctx2.entropy = &entropy; ctx2.clock = &clock; ctx2.network = &network; ctx2.logger = &logger;
+
+    // First boot - create and persist identity
+    EXPECT_EQ(neondoll_init(&ctx1), 0);
+    EXPECT_TRUE(ctx1.initialized);
+    const neondoll::IdentityState* identity1 = neondoll_get_identity(&ctx1);
+    ASSERT_NE(identity1, nullptr);
+    std::string first_body_id = identity1->identity.body_id;
+    EXPECT_FALSE(first_body_id.empty());
+
+    // Persist by deiniting (which should save via neondoll_init's logic on first boot)
+    EXPECT_EQ(neondoll_deinit(&ctx1), 0);
+    EXPECT_FALSE(ctx1.initialized);
+
+    // Second boot - restart and load identical identity
+    EXPECT_EQ(neondoll_init(&ctx2), 0);
+    EXPECT_TRUE(ctx2.initialized);
+    const neondoll::IdentityState* identity2 = neondoll_get_identity(&ctx2);
+    ASSERT_NE(identity2, nullptr);
+    std::string second_body_id = identity2->identity.body_id;
+    EXPECT_FALSE(second_body_id.empty());
+    EXPECT_EQ(first_body_id, second_body_id) << "Body ID should persist across deinit/init cycle";
+
+    // Clean up
+    EXPECT_EQ(neondoll_deinit(&ctx2), 0);
+    EXPECT_FALSE(ctx2.initialized);
+}
+
+TEST(NeondollLifecycleTest, CorruptRecordIsRejectedWithoutReplacement) {
+    neondoll::PlatformContext ctx;
+    MockStorage storage;
+    MockEntropy entropy;
+    MockClock clock;
+    MockNetwork network;
+    MockLogger logger;
+
+    ctx.storage = &storage; ctx.entropy = &entropy; ctx.clock = &clock; ctx.network = &network; ctx.logger = &logger;
+
+    // First boot - create identity
+    EXPECT_EQ(neondoll_init(&ctx), 0);
+    EXPECT_TRUE(ctx.initialized);
+    const neondoll::IdentityState* identity1 = neondoll_get_identity(&ctx);
+    ASSERT_NE(identity1, nullptr);
+    std::string first_body_id = identity1->identity.body_id;
+    EXPECT_FALSE(first_body_id.empty());
+
+    // Corrupt the persisted identity by writing invalid data
+    storage.read_return = 0;   // allow reading from the storage map
+    storage.read_return = 21;  // size of corrupt data without quotes
+    storage.storage_["neondoll/identity"] = "invalid!@#$%^&*()data";
+
+    // Deinit and restart with corrupted data
+    EXPECT_EQ(neondoll_deinit(&ctx), 0);
+    EXPECT_FALSE(ctx.initialized);
+
+    // Second boot should fail to load corrupted identity (reject without replacement)
+    EXPECT_EQ(neondoll_init(&ctx), -10); // failed to load or create identity
+    EXPECT_FALSE(ctx.initialized);
+
+    // Third boot should also fail to load corrupted identity (still corrupt, no replacement)
+    EXPECT_EQ(neondoll_init(&ctx), -10);
+    EXPECT_FALSE(ctx.initialized);
+
+    // Now, if we remove the corrupt record (simulate missing key), we should get a new identity
+    storage.storage_.erase("neondoll/identity");
+    EXPECT_EQ(neondoll_deinit(&ctx), -2);   // deinit uninitialized context
+    EXPECT_FALSE(ctx.initialized);
+    EXPECT_EQ(neondoll_init(&ctx), 0);
+    EXPECT_TRUE(ctx.initialized);
+    const neondoll::IdentityState* identity3 = neondoll_get_identity(&ctx);
+    ASSERT_NE(identity3, nullptr);
+    std::string third_body_id = identity3->identity.body_id;
+    EXPECT_FALSE(third_body_id.empty());
+    EXPECT_EQ(neondoll_deinit(&ctx), 0);
+    EXPECT_FALSE(ctx.initialized);
+}
+
 
 } // namespace

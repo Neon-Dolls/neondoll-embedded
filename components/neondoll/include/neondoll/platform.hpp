@@ -6,6 +6,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <neondoll/identity_state.hpp>
 
 namespace neondoll {
 
@@ -132,6 +133,7 @@ struct PlatformContext {
     NetworkAvailability* network = nullptr;  ///< Not owned by NeonDoll
     Logger*        logger        = nullptr;  ///< Not owned by NeonDoll
     bool           initialized   = false;    ///< Tracks initialization state for this context
+    neondoll::IdentityState identity_state;   ///< Current identity state, valid after successful init
 };
 
 } // namespace neondoll
@@ -139,6 +141,18 @@ struct PlatformContext {
 // Forward declarations for the C API
 #ifdef __cplusplus
 extern "C" {
+#endif
+
+/**
+ * @brief Get the current identity state from the platform context.
+ *        Only valid after successful neondoll_init() call.
+ * @param ctx   Platform context passed to neondoll_init
+ * @return Pointer to the current identity state, or NULL if ctx is NULL or not initialized
+ */
+const neondoll::IdentityState* neondoll_get_identity(const neondoll::PlatformContext* ctx);
+
+#ifdef __cplusplus
+} // extern "C"
 #endif
 
 /**
@@ -173,9 +187,5 @@ int neondoll_init(neondoll::PlatformContext* ctx);
  *         -7: logger deinit failed
  */
 int neondoll_deinit(neondoll::PlatformContext* ctx);
-
-#ifdef __cplusplus
-} // extern "C"
-#endif
 
 #endif // NEONDOLL_PLATFORM_HPP

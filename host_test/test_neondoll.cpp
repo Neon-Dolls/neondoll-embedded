@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <gtest/gtest.h>
+#include <map>
+#include <cstring>
 #include <neondoll/platform.hpp>
 
 namespace {
@@ -9,7 +11,7 @@ namespace {
 class MockStorage : public neondoll::Storage {
 public:
     MockStorage() : init_calls(0), deinit_calls(0), read_calls(0), write_calls(0),
-                       init_return(0), deinit_return(0), read_return(-1), write_return(0) {}
+                       init_return(0), deinit_return(0), read_return(0), write_return(0) {}
     int init() override { ++init_calls; return init_return; }
     int deinit() override { ++deinit_calls; return deinit_return; }
     std::ptrdiff_t read(const char* key, void* out, size_t max_size) override {
@@ -65,7 +67,7 @@ public:
         }
         // Fill buffer with a fixed pattern (0xAA) for testing
         memset(out, 0xAA, len);
-        return static_cast<int>(len);
+        return 0;
     }
 
     void set_fail_init(bool fail) { fail_init_ = fail; }
@@ -104,7 +106,7 @@ public:
 
     int init() override { ++init_calls; return init_return; }
     int deinit() override { ++deinit_calls; return deinit_return; }
-    int set_callback(Callback cb, void* arg) override { return set_callback_return; }
+    int set_callback(Callback, void*) override { return set_callback_return; }
 };
 
 class MockLogger : public neondoll::Logger {
@@ -117,7 +119,7 @@ public:
 
     int init() override { ++init_calls; return init_return; }
     int deinit() override { ++deinit_calls; return deinit_return; }
-    int log(int level, const char* tag, const char* msg) override { return log_return; }
+    int log(int, const char*, const char*) override { return log_return; }
 };
 
 TEST(NeondollLifecycleTest, BasicInitDeinitSuccess) {

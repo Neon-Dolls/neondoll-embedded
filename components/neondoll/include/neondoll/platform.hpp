@@ -32,6 +32,7 @@ public:
     ///         -1: key not found
     ///         -2: buffer too small (value size > max_size)
     ///         -3: I/O error
+    ///         -4: existing value has incompatible storage type/corruption
     virtual std::ptrdiff_t read(const char* key, void* out, size_t max_size) = 0;
 
     /// Write a value by key.

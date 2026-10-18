@@ -52,13 +52,13 @@ struct BodyIdentity {
     BodyMetadata meta;           ///< Implementation/platform/arch metadata
     uint64_t counter;            ///< Monotonically increasing counter for identity versions
     uint64_t timestamp;          ///< Timestamp of identity creation/update
-    std::string signature;       ///< Cryptographic signature of the identity (64 hex chars)
+    std::string signature;       ///< Reserved; empty until a public credential contract requires it
 };
 
 /** @brief Current format version of the persistable identity envelope.
  *         Bump this (and teach load_identity/save_identity) before changing shape.
  */
-constexpr int CURRENT_IDENTITY_VERSION = 1;
+constexpr int CURRENT_IDENTITY_VERSION = 2;
 
 /** @brief Builds a fresh identity state with new Body ID and given metadata/name.
  *  @param entropy  Entropy source for generating the Body ID

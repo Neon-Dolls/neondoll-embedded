@@ -1,213 +1,132 @@
 // Copyright 2026 Neon-Dolls/neondoll-embedded
 // SPDX-License-Identifier: Apache-2.0
-
 #include <neondoll/identity_storage.hpp>
 #include <neondoll/platform.hpp>
-#include <neondoll/identity.hpp>
-#include <sstream>
-#include <iomanip>
-#include <cctype>
-#include <cstdint>
-#include <algorithm>
+#include <utility>
+#include <array>
+#include <cstdio>
+#include <limits>
 
 namespace neondoll {
-
-// Helper to check if a character is a hex digit
-static inline bool is_hex(char c) {
-    return std::isxdigit(static_cast<unsigned char>(c));
+namespace {
+constexpr size_t max_record = 1024;
+constexpr size_t max_field = 64;
+int hex(char c) {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
 }
-
-// Helper to convert a hex char to its integer value
-static inline int hex_to_int(char c) {
-    if (std::isdigit(static_cast<unsigned char>(c)))
-        return c - '0';
-    c = std::tolower(static_cast<unsigned char>(c));
-    return c - 'a' + 10;
-}
-
-// Helper to parse a hexadecimal string of fixed length
-// Returns true if successful, false otherwise.
-// On success, advances pos by len and sets out to the parsed string.
-static bool parse_hex_string_fixed(const std::string& data, size_t& pos, size_t len, std::string& out) {
-    if (pos + len > data.size()) {
-        return false;
-    }
-    out.assign(data.substr(pos, len));
-    // Validate that it's all hex digits
-    for (size_t i = 0; i < len; ++i) {
-        if (!is_hex(data[pos + i])) {
-            return false;
-        }
-    }
-    pos += len;
+bool body_id_valid(const std::string& id) {
+    if (id.size() != 32) return false;
+    for (char c : id) if (hex(c) < 0) return false;
     return true;
 }
-
-// Helper to parse a decimal number (unsigned)
-// Returns true if successful, false otherwise.
-// On success, advances pos past the number and sets out to the parsed value.
-// Includes overflow protection for uint64_t.
-static bool parse_decimal(const std::string& data, size_t& pos, uint64_t& out) {
-    size_t start = pos;
-    while (pos < data.size() && std::isdigit(data[pos])) {
-        ++pos;
-    }
-    if (start == pos) {
-        return false; // no digits
-    }
+bool decimal(const std::string& s, uint64_t& out) {
+    if (s.empty() || s.size() > 20) return false;
     out = 0;
-    for (size_t i = start; i < pos; ++i) {
-        // Check for overflow before multiplying and adding
-        if (out > (UINT64_MAX - (data[i] - '0')) / 10) {
-            return false; // overflow would occur
-        }
-        out = out * 10 + (data[i] - '0');
+    for (char c : s) {
+        if (c < '0' || c > '9') return false;
+        unsigned digit = static_cast<unsigned>(c - '0');
+        if (out > (std::numeric_limits<uint64_t>::max() - digit) / 10) return false;
+        out = out * 10 + digit;
     }
     return true;
 }
-
-// Helper to format an unsigned integer as decimal string
-static std::string format_decimal(uint64_t value) {
-    if (value == 0) {
-        return "0";
+uint32_t crc32(const std::string& s) {
+    uint32_t crc = 0xffffffffU;
+    for (unsigned char c : s) {
+        crc ^= c;
+        for (int bit = 0; bit < 8; ++bit)
+            crc = (crc >> 1) ^ (0xedb88320U & (0U - (crc & 1U)));
     }
-    std::string result;
-    while (value > 0) {
-        result.insert(result.begin(), static_cast<char>('0' + (value % 10)));
-        value /= 10;
+    return ~crc;
+}
+std::string encode(const std::string& s) {
+    static constexpr char digits[] = "0123456789abcdef";
+    std::string out;
+    for (unsigned char c : s) { out += digits[c >> 4]; out += digits[c & 15]; }
+    return out;
+}
+bool decode(const std::string& s, std::string& out) {
+    if (s.size() > max_field * 2 || s.size() % 2) return false;
+    for (size_t i = 0; i < s.size(); i += 2) {
+        int a = hex(s[i]), b = hex(s[i + 1]);
+        if (a < 0 || b < 0) return false;
+        out += static_cast<char>((a << 4) | b);
     }
-    return result;
+    return true;
+}
 }
 
-// Helper to format a byte array as hex string
-static std::string format_hex(const uint8_t* data, size_t len) {
-    std::stringstream ss;
-    ss << std::hex << std::setfill('0');
-    for (size_t i = 0; i < len; ++i) {
-        ss << std::setw(2) << static_cast<int>(data[i]);
-    }
-    return ss.str();
-}
-
-// Parse identity from colon-separated string: v1:{body_id_hex}:{counter}:{timestamp}
-// Parse identity from colon-separated string: v1:{body_id_hex}:{counter}:{timestamp}
 bool parse_identity(const std::string& data, IdentityState& state) {
-    size_t pos = 0;
-
-    // Check version prefix: "v1:"
-    if (pos + 3 > data.size() || data.substr(pos, 3) != "v1:") {
-        return false;
+    if (data.empty() || data.size() > max_record) return false;
+    std::array<std::string, 9> fields;
+    size_t start = 0, count = 0;
+    for (;;) {
+        if (count == fields.size()) return false;
+        auto end = data.find(':', start);
+        fields[count++] = data.substr(start, end == std::string::npos ? end : end - start);
+        if (end == std::string::npos) break;
+        start = end + 1;
     }
-    pos += 3;
-
-    // Parse body_id_hex: 32 hex characters (16 bytes)
-    if (!parse_hex_string_fixed(data, pos, 32, state.identity.body_id)) {
-        return false;
-    }
-
-    // Expect colon
-    if (pos >= data.size() || data[pos] != ':') {
-        return false;
-    }
-    ++pos;
-
-    // Parse counter (unsigned integer)
-    if (!parse_decimal(data, pos, state.identity.counter)) {
-        return false;
-    }
-
-    // Expect colon
-    if (pos >= data.size() || data[pos] != ':') {
-        return false;
-    }
-    ++pos;
-
-    // Parse timestamp (unsigned integer)
-    if (!parse_decimal(data, pos, state.identity.timestamp)) {
-        return false;
-    }
-
-    // Expect end of string (no signature field anymore)
-    if (pos != data.size()) {
-        return false;
-    }
-
-    // Set the version
-    state.version = CURRENT_IDENTITY_VERSION;
-
+    IdentityState parsed{};
+    if (fields[0] == "v1" && count == 4) {
+        parsed.version = 1; // Legacy record: caller upgrades atomically, never changes ID.
+    } else if (fields[0] == "v2" && count == 9) {
+        const auto checksum_pos = data.rfind(':');
+        if (fields[8].size() != 8) return false;
+        uint32_t expected = 0;
+        for (char c : fields[8]) {
+            int n = hex(c); if (n < 0) return false;
+            expected = (expected << 4) | static_cast<uint32_t>(n);
+        }
+        if (crc32(data.substr(0, checksum_pos)) != expected) return false;
+        if (!decode(fields[4], parsed.identity.name) ||
+            !decode(fields[5], parsed.identity.meta.implementation) ||
+            !decode(fields[6], parsed.identity.meta.platform) ||
+            !decode(fields[7], parsed.identity.meta.arch)) return false;
+        parsed.version = CURRENT_IDENTITY_VERSION;
+    } else return false;
+    if (!body_id_valid(fields[1]) || !decimal(fields[2], parsed.identity.counter) ||
+        !decimal(fields[3], parsed.identity.timestamp)) return false;
+    parsed.identity.body_id = fields[1];
+    state = std::move(parsed);
     return true;
 }
 
-// Format identity to colon-separated string: v1:{body_id_hex}:{counter}:{timestamp}
-// Format identity to colon-separated string: v1:{body_id_hex}:{counter}:{timestamp}
-std::string format_identity(const IdentityState& identity) {
-    std::stringstream ss;
-    ss << std::hex << std::setfill('0');
-    ss << "v1:"
-       << std::setw(32) << identity.identity.body_id << ":"
-       << std::dec << identity.identity.counter << ":"
-       << std::dec << identity.identity.timestamp;
-    return ss.str();
+std::string format_identity(const IdentityState& state) {
+    const auto& id = state.identity;
+    if (state.version != CURRENT_IDENTITY_VERSION || !body_id_valid(id.body_id) ||
+        id.name.size() > max_field || id.meta.implementation.size() > max_field ||
+        id.meta.platform.size() > max_field || id.meta.arch.size() > max_field) return {};
+    std::string data = "v2:" + id.body_id + ":" + std::to_string(id.counter) + ":" +
+        std::to_string(id.timestamp) + ":" + encode(id.name) + ":" +
+        encode(id.meta.implementation) + ":" + encode(id.meta.platform) + ":" + encode(id.meta.arch);
+    char checksum[10];
+    std::snprintf(checksum, sizeof(checksum), ":%08lx", static_cast<unsigned long>(crc32(data)));
+    return data + checksum;
 }
 
-int load_identity(Storage* storage,
-                 const std::string& key,
-                 IdentityState& out) {
-    if (!storage) {
-        return -1; // null storage pointer
-    }
-
-    // Read the persisted data
-    constexpr size_t MAX_IDENTITY_SIZE = 1024;
-    std::string buffer(MAX_IDENTITY_SIZE, '\0');
-    ssize_t bytes_read = storage->read(key.c_str(), buffer.data(), buffer.size());
-
-    if (bytes_read < 0) {
-        if (bytes_read == -1) {
-            return -3; // key not found (genuinely missing key - permits first boot)
-        } else {
-            return -6; // storage read I/O error
-        }
-    }
-
-    // Resize buffer to actual data read
-    buffer.resize(static_cast<size_t>(bytes_read));
-
-    // Treat empty buffer as corrupt data (never first boot)
-    if (buffer.empty()) {
-        return -4; // persisted data is corrupt or incomplete
-    }
-
-    // Parse the identity data
-    if (!parse_identity(buffer, out)) {
-        return -4; // persisted data is corrupt or incomplete
-    }
-
-    // Check version compatibility
-    if (out.version != CURRENT_IDENTITY_VERSION) {
-        return -5; // persisted data has incompatible version
-    }
-
-    return 0; // success
+int load_identity(Storage* storage, const std::string& key, IdentityState& out) {
+    if (!storage) return -1;
+    std::array<char, max_record> buffer{};
+    const auto size = storage->read(key.c_str(), buffer.data(), buffer.size());
+    if (size == -1) return -3;
+    if (size == -2 || size > static_cast<std::ptrdiff_t>(buffer.size())) return -7;
+    if (size == -4) return -4;
+    if (size < 0) return -6;
+    std::string data(buffer.data(), static_cast<size_t>(size));
+    const auto colon = data.find(':');
+    if (colon != std::string::npos && data[0] == 'v' &&
+        data.substr(0, colon) != "v1" && data.substr(0, colon) != "v2") return -5;
+    return parse_identity(data, out) ? 0 : -4;
 }
 
-int save_identity(Storage* storage,
-                 const std::string& key,
-                 const IdentityState& identity) {
-    if (!storage) {
-        return -1; // null storage pointer
-    }
-
-    // Serialize the identity
-    std::string data = format_identity(identity);
-
-    // Write the data
-    int result = storage->write(key.c_str(), data.data(), data.size());
-    if (result < 0) {
-        return -3; // storage write I/O error
-    }
-
-    return 0; // success
+int save_identity(Storage* storage, const std::string& key, const IdentityState& state) {
+    if (!storage) return -1;
+    const auto data = format_identity(state);
+    if (data.empty()) return -4;
+    return storage->write(key.c_str(), data.data(), data.size()) == 0 ? 0 : -3;
 }
-
 } // namespace neondoll

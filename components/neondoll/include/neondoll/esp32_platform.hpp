@@ -1,51 +1,59 @@
+// Copyright 2026 Neon-Dolls/neondoll-embedded
+// SPDX-License-Identifier: Apache-2.0
 #ifndef NEONDOLL_ESP32_PLATFORM_HPP
 #define NEONDOLL_ESP32_PLATFORM_HPP
-
 #include <neondoll/platform.hpp>
+#include <nvs.h>
 
 namespace neondoll {
-
-/** Minimal ESP32 storage adapter for M0.2. */
+/** NVS namespace "neondoll". Maps logical "neondoll/identity" to NVS "identity".
+ * Never erases flash on initialization failure. Caller serializes all operations.
+ */
 class Esp32Storage : public Storage {
 public:
-    int init() override { return 0; }
-    int deinit() override { return 0; }
-    std::ptrdiff_t read(const char* key, void* out, size_t max_size) override { return -1; } // not implemented
-    int write(const char* key, const void* in, size_t size) override { return -1; } // not implemented
+    Esp32Storage() = default;
+    Esp32Storage(const Esp32Storage&) = delete;
+    Esp32Storage& operator=(const Esp32Storage&) = delete;
+    ~Esp32Storage() override { deinit(); }
+    int init() override;
+    int deinit() override;
+    std::ptrdiff_t read(const char* key, void* out, size_t max_size) override;
+    int write(const char* key, const void* in, size_t size) override;
+private:
+    nvs_handle_t handle_ = 0;
+    bool initialized_ = false;
+    bool write_failed_ = false;
 };
-
-/** Minimal ESP32 entropy source adapter for M0.2. */
+/** Bootstrap entropy: use before starting RF/ADC/I2S, with exclusive access to
+ * the internal entropy source. A future live-radio adapter must use that radio's
+ * documented entropy guarantees instead of enabling the bootstrap source.
+ */
 class Esp32EntropySource : public EntropySource {
 public:
-    int init() override { return 0; }
-    int deinit() override { return 0; }
-    int get_random(void* out, size_t len) override { return -1; } // not implemented
+    int init() override { initialized_ = true; return 0; }
+    int deinit() override { initialized_ = false; return 0; }
+    int get_random(void* out, size_t len) override;
+private:
+    bool initialized_ = false;
 };
-
-/** Minimal ESP32 clock adapter for M0.2. */
 class Esp32Clock : public Clock {
 public:
     int init() override { return 0; }
     int deinit() override { return 0; }
-    uint64_t now_ms() override { return 0; } // not implemented
+    uint64_t now_ms() override;
 };
-
-/** Minimal ESP32 network availability adapter for M0.2. */
+/** M1 has no network monitor. Explicitly rejects callback registration until M2. */
 class Esp32NetworkAvailability : public NetworkAvailability {
 public:
     int init() override { return 0; }
     int deinit() override { return 0; }
-    int set_callback(Callback cb, void* arg) override { return -1; } // not implemented
+    int set_callback(Callback, void*) override { return -1; }
 };
-
-/** Minimal ESP32 logger adapter for M0.2. */
 class Esp32Logger : public Logger {
 public:
     int init() override { return 0; }
     int deinit() override { return 0; }
-    int log(int level, const char* tag, const char* msg) override { return -1; } // discard
+    int log(int level, const char* tag, const char* msg) override;
 };
-
 } // namespace neondoll
-
-#endif // NEONDOLL_ESP32_PLATFORM_HPP
+#endif

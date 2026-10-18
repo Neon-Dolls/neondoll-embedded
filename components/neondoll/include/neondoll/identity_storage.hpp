@@ -24,6 +24,7 @@ namespace neondoll {
  *          -4: persisted data is corrupt or incomplete
  *          -5: persisted data has incompatible version
  *          -6: storage read I/O error
+ *          -7: persisted record exceeds buffer limit
  */
 int load_identity(Storage* storage, 
                  const std::string& key,
@@ -37,6 +38,7 @@ int load_identity(Storage* storage,
  *          -1: null storage pointer
  *          -2: storage init failed
  *          -3: storage write I/O error
+ *          -4: invalid identity or field exceeds 64 bytes
  */
 int save_identity(Storage* storage,
                  const std::string& key,

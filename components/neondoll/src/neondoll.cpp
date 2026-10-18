@@ -61,15 +61,28 @@ int neondoll_init(neondoll::PlatformContext* ctx) {
     // Use the identity_state in the PlatformContext for persistence across init/deinit
     ret = neondoll::load_identity(ctx->storage, IDENTITY_STORAGE_KEY, ctx->identity_state);
     if (ret == 0) {
+        // Upgrade the legacy envelope without generating a new Body ID.
+        if (ctx->identity_state.version == 1) {
+            ctx->identity_state.version = neondoll::CURRENT_IDENTITY_VERSION;
+            if (neondoll::save_identity(ctx->storage, IDENTITY_STORAGE_KEY, ctx->identity_state) != 0) {
+                ctx->logger->deinit(); ctx->network->deinit(); ctx->clock->deinit();
+                ctx->entropy->deinit(); ctx->storage->deinit();
+                return -10;
+            }
+        }
         // Successfully loaded existing identity - validation passed
         // Identity is now ready for use by the application
     } else if (ret == -3) {
         // Key not found - first boot, create new identity
-        neondoll::BodyMetadata meta{
-            .implementation = "neondoll-embedded",
-            .platform = "",   // Will be filled by platform-specific code if needed
-            .arch = ""        // Will be filled by platform-specific code if needed
-        };
+        neondoll::BodyMetadata meta{"neondoll-embedded", "", ""};
+#ifdef ESP_PLATFORM
+        meta.platform = "esp32";
+#if defined(__XTENSA__)
+        meta.arch = "xtensa";
+#elif defined(__riscv)
+        meta.arch = "riscv";
+#endif
+#endif
 
         ret = neondoll::new_identity_state(ctx->entropy, "", meta, ctx->identity_state);
         if (ret != 0) {

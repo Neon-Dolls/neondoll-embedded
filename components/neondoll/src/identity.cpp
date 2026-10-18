@@ -3,6 +3,7 @@
 
 #include <neondoll/identity.hpp>
 #include <neondoll/platform.hpp>
+#include <utility>
 #include <cstring> // for memcpy
 #include <cstdint>
 #include <array>
@@ -17,10 +18,12 @@ int generate_body_id(EntropySource* entropy, BodyID& out) {
     // Generate 16 random bytes (128 bits of entropy)
     std::array<uint8_t, 16> buf{};
     int ret = entropy->get_random(buf.data(), buf.size());
-    if (ret < 0) {
+    if (ret != 0) {
         return -3; // failed to get random bytes
     }
 
+    out.clear();
+    out.reserve(32);
     // Create BodyID as hex encoding (32 characters for 16 bytes)
     static const char hex_chars[] = "0123456789abcdef";
     for (uint8_t b : buf) {

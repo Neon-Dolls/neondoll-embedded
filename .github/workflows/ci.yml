@@ -1,45 +1,32 @@
 name: CI
-
 on:
   push:
-    branches: [ master, '**' ]
   pull_request:
-    branches: [ master ]
-
+    branches: [master]
 jobs:
-  build:
+  host:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
-
     steps:
-    - uses: actions/checkout@v4
-    - name: Install system dependencies
-      run: sudo apt-get update && sudo apt-get install -y git wget flex bison gperf python3 python3-pip python3-setuptools cmake ninja-build ccache libffi-dev libssl-dev dfu-util libusb-1.0-0
-    - name: Setup ESP-IDF
-      uses: espressif/esp-idf-ci-action@v1
-      with:
-        esp_idf_version: v5.2.1
-        target: esp32
-        path: examples/minimal_body
-    - name: Check ESP-IDF Build Artifacts
-      run: |
-        ls -lh examples/minimal_body/build/minimal_body.elf examples/minimal_body/build/minimal_body.bin
-        size examples/minimal_body/build/minimal_body.elf
-    - name: Install dependencies for host test
-      run: sudo apt-get update && sudo apt-get install -y libgtest-dev cmake
-    - name: Build gtest
-      run: |
-        cd /usr/src/gtest
-        sudo cmake CMakeLists.txt
-        sudo make
-        sudo cp lib/*.a /usr/lib
-    - name: Build Host Test (lifecycle)
-      run: |
-        g++ -std=c++17 -Icomponents/neondoll/include host_test/test_neondoll.cpp components/neondoll/src/neondoll.cpp components/neondoll/src/identity.cpp components/neondoll/src/identity_storage.cpp -lgtest -lgtest_main -pthread -o host_test/test_neondoll
-    - name: Run Host Test (lifecycle)
-      run: host_test/test_neondoll
-    - name: Build Host Test (identity)
-      run: |
-        g++ -std=c++17 -Icomponents/neondoll/include host_test/test_neondoll_identity.cpp components/neondoll/src/neondoll.cpp components/neondoll/src/identity.cpp components/neondoll/src/identity_storage.cpp -lgtest -lgtest_main -pthread -o host_test/test_neondoll_identity
-    - name: Run Host Test (identity)
-      run: host_test/test_neondoll_identity
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y libgtest-dev cmake ninja-build
+      - run: cmake -S . -B build/host -G Ninja
+      - run: cmake --build build/host
+      - run: ctest --test-dir build/host --output-on-failure
+  esp32:
+    runs-on: ubuntu-latest
+    container: espressif/idf:v5.2.1
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and emulate ESP32 firmware
+        shell: bash
+        run: |
+          . /opt/esp/idf/export.sh
+          idf.py -C examples/minimal_body build
+          python integration/qemu_identity.py examples/minimal_body/build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: minimal-body-esp32
+          path: |
+            examples/minimal_body/build/minimal_body.bin
+            examples/minimal_body/build/minimal_body.elf
+            examples/minimal_body/build/qemu-boot-*.log

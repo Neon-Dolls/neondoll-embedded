@@ -11,6 +11,7 @@ struct FakeNvs {
     int commits=0, closes=0, opens=0, entropy_enable=0, entropy_disable=0;
     // Commit outcomes model atomic old/new and detectable damaged records.
     int commit_outcome=0; // 0: old; 1: new despite error; 2: partial despite error
+    bool truncate_marker=false;
     bool enabled=false, fail_identity_set=false;
     std::map<std::string,std::string> durable, staged;
 } fake;
@@ -42,7 +43,7 @@ esp_err_t nvs_commit(nvs_handle_t){
     if(!fake.commit_error || fake.commit_outcome==1) {
         for(const auto& item:fake.staged)fake.durable[item.first]=item.second;
     } else if(fake.commit_outcome==2) {
-        for(const auto& item:fake.staged)fake.durable[item.first]=item.second.substr(0,10);
+        for(const auto& item:fake.staged)fake.durable[item.first]=item.second.substr(0,fake.truncate_marker ? 2 : 10);
     }
     return fake.commit_error;
 }
@@ -156,4 +157,89 @@ TEST_F(AdapterTest, OpenFailureAndRepeatedInitHaveCorrectHandleOwnership) {
     const int opens=fake.opens;
     EXPECT_EQ(storage.init(),0); EXPECT_EQ(fake.opens,opens);
     storage.deinit(); storage.deinit(); EXPECT_EQ(fake.closes,1);
+}
+
+TEST_F(AdapterTest, PreMarkerLegacyIdentityMigratesBeforeReturningData) {
+    const std::string legacy="v1:0123456789abcdef0123456789abcdef:0:0";
+    fake.durable["identity"]=legacy;
+    neondoll::Esp32Storage storage; ASSERT_EQ(storage.init(),0);
+    neondoll::IdentityState state{};
+    ASSERT_EQ(neondoll::load_identity(&storage,"neondoll/identity",state),0);
+    EXPECT_EQ(state.identity.body_id,"0123456789abcdef0123456789abcdef");
+    EXPECT_EQ(fake.durable.at("identity"),legacy);
+    EXPECT_EQ(fake.durable.at("identity_init"),std::string("NDI1",5));
+    EXPECT_EQ(fake.commits,1);
+    ASSERT_EQ(neondoll::load_identity(&storage,"neondoll/identity",state),0);
+    EXPECT_EQ(fake.commits,1);
+    // The persisted guard prevents a subsequently missing blob looking fresh.
+    storage.deinit(); fake.durable.erase("identity");
+    ASSERT_EQ(storage.init(),0);
+    EXPECT_EQ(neondoll::load_identity(&storage,"neondoll/identity",state),-4);
+}
+TEST_F(AdapterTest, PreMarkerCommitFailureAndRecoveryNeverRegenerateIdentity) {
+    for(int outcome:{0,1}) {
+        fake=FakeNvs{};
+        const std::string legacy="v1:0123456789abcdef0123456789abcdef:0:0";
+        fake.durable["identity"]=legacy;
+        fake.commit_error=ESP_FAIL; fake.commit_outcome=outcome;
+        neondoll::Esp32Storage storage; neondoll::Esp32EntropySource entropy;
+        neondoll::Esp32Clock clock; neondoll::Esp32NetworkAvailability network;
+        neondoll::Esp32Logger logger; neondoll::PlatformContext ctx;
+        ctx.storage=&storage; ctx.entropy=&entropy; ctx.clock=&clock;
+        ctx.network=&network; ctx.logger=&logger;
+        EXPECT_EQ(neondoll_init(&ctx),-10);
+        EXPECT_EQ(neondoll_get_identity(&ctx),nullptr);
+        EXPECT_EQ(fake.durable.at("identity"),legacy);
+        EXPECT_EQ(fake.entropy_enable,0);
+        // Commit may have retained the old state or persisted the marker despite
+        // returning an error. Reopen and recover from either durable outcome.
+        fake.commit_error=0;
+        ASSERT_EQ(neondoll_init(&ctx),0);
+        EXPECT_EQ(ctx.identity_state.identity.body_id,"0123456789abcdef0123456789abcdef");
+        EXPECT_EQ(fake.entropy_enable,0);
+        EXPECT_EQ(neondoll_deinit(&ctx),0);
+        ASSERT_EQ(neondoll_init(&ctx),0);
+        EXPECT_EQ(ctx.identity_state.identity.body_id,"0123456789abcdef0123456789abcdef");
+        EXPECT_EQ(fake.entropy_enable,0);
+        EXPECT_EQ(neondoll_deinit(&ctx),0);
+    }
+}
+TEST_F(AdapterTest, InterruptedPreMarkerCommitLeavesIdentityAndFailsClosed) {
+    const std::string legacy="v1:0123456789abcdef0123456789abcdef:0:0";
+    fake.durable["identity"]=legacy;
+    fake.commit_error=ESP_FAIL; fake.commit_outcome=2; fake.truncate_marker=true;
+    neondoll::Esp32Storage storage; ASSERT_EQ(storage.init(),0);
+    neondoll::IdentityState state{};
+    EXPECT_EQ(neondoll::load_identity(&storage,"neondoll/identity",state),-6);
+    EXPECT_EQ(fake.durable.at("identity"),legacy);
+    EXPECT_EQ(neondoll::load_identity(&storage,"neondoll/identity",state),-6);
+    storage.deinit(); fake.commit_error=0; ASSERT_EQ(storage.init(),0);
+    EXPECT_EQ(neondoll::load_identity(&storage,"neondoll/identity",state),-4);
+    EXPECT_EQ(fake.durable.at("identity"),legacy);
+    EXPECT_EQ(fake.commits,1);
+    EXPECT_EQ(fake.entropy_enable,0);
+}
+TEST_F(AdapterTest, PreMarkerSetFailureDoesNotCommitOrTouchIdentity) {
+    const std::string legacy="v1:0123456789abcdef0123456789abcdef:0:0";
+    fake.durable["identity"]=legacy; fake.set_error=ESP_FAIL;
+    neondoll::Esp32Storage storage; ASSERT_EQ(storage.init(),0);
+    neondoll::IdentityState state{};
+    EXPECT_EQ(neondoll::load_identity(&storage,"neondoll/identity",state),-6);
+    EXPECT_EQ(fake.commits,0); EXPECT_EQ(fake.durable.at("identity"),legacy);
+    storage.deinit(); fake.set_error=0; ASSERT_EQ(storage.init(),0);
+    EXPECT_EQ(neondoll::load_identity(&storage,"neondoll/identity",state),0);
+    EXPECT_EQ(state.identity.body_id,"0123456789abcdef0123456789abcdef");
+}
+
+TEST_F(AdapterTest, PreMarkerCurrentIdentityGetsGuardWithoutIdentityRewrite) {
+    neondoll::IdentityState state{};
+    ASSERT_TRUE(neondoll::parse_identity("v1:0123456789abcdef0123456789abcdef:0:0",state));
+    state.version=neondoll::CURRENT_IDENTITY_VERSION;
+    const auto current=neondoll::format_identity(state);
+    fake.durable["identity"]=current;
+    neondoll::Esp32Storage storage; ASSERT_EQ(storage.init(),0);
+    ASSERT_EQ(neondoll::load_identity(&storage,"neondoll/identity",state),0);
+    EXPECT_EQ(fake.durable.at("identity"),current);
+    EXPECT_EQ(fake.durable.at("identity_init"),std::string("NDI1",5));
+    EXPECT_EQ(fake.commits,1);
 }

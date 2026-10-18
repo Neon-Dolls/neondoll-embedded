@@ -63,6 +63,18 @@ std::ptrdiff_t Esp32Storage::read(const char* key, void* out, size_t max_size) {
         const int marker = identity_marker(handle_);
         if (marker < 0) return marker;
         if (err == ESP_ERR_NVS_NOT_FOUND && marker == 1) return -4;
+        if (err == ESP_OK && marker == 0) {
+            // Protect pre-marker identities before exposing them to the runtime.
+            // Never rewrite the identity while establishing this guard: after a
+            // failed/interrupted commit, retry must load the same existing ID.
+            auto marker_err = nvs_set_blob(handle_, marker_key, marker_value, sizeof(marker_value));
+            if (marker_err == ESP_OK) marker_err = nvs_commit(handle_);
+            if (marker_err != ESP_OK) {
+                write_failed_ = true;
+                esp_log_write(ESP_LOG_ERROR, "neondoll", "NVS identity marker commit failed: %d\n", marker_err);
+                return -3;
+            }
+        }
     }
     if (err == ESP_ERR_NVS_NOT_FOUND) return -1;
     if (err == ESP_ERR_NVS_TYPE_MISMATCH) return -4;

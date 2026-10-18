@@ -258,3 +258,58 @@ TEST_F(NetworkTest, FailedExplicitDisconnectStillSuppressesAutomaticReconnect) {
     state().fail.clear();ASSERT_EQ(network.connect(),0);
     got_ip(3);EXPECT_EQ(network.poll(),0);EXPECT_TRUE(network.available());
 }
+
+TEST_F(NetworkTest, DelayedStopNotificationDoesNotSkipStoppingRunningDriver) {
+    ready();got_ip(1);ASSERT_EQ(network.poll(),0);
+    emit(WIFI_EVENT,WIFI_EVENT_STA_STOP);
+    // The queued notification is not authoritative about the driver's current
+    // state (e.g. a delayed event after the driver has become active again).
+    state().started=true;
+    ASSERT_EQ(network.poll(),0);
+    EXPECT_FALSE(network.available());EXPECT_EQ(network.connect(),-1);
+    const auto stops=std::count(state().calls.begin(),state().calls.end(),"wifi_stop");
+    ASSERT_EQ(network.start("ssid","p"),0);
+    EXPECT_EQ(std::count(state().calls.begin(),state().calls.end(),"wifi_stop"),stops+1);
+    EXPECT_EQ(state().handlers.size(),2u);EXPECT_EQ(state().interfaces,1);
+    EXPECT_EQ(state().queues,1);ASSERT_EQ(network.connect(),0);
+    got_ip(2);EXPECT_EQ(network.poll(),0);EXPECT_TRUE(network.available());
+}
+
+TEST_F(NetworkTest, StopThenFailedDeinitRetriesActualDriverStopBeforeRestart) {
+    ready();got_ip(1);ASSERT_EQ(network.poll(),0);
+    emit(WIFI_EVENT,WIFI_EVENT_STA_STOP);ASSERT_EQ(network.poll(),0);
+    state().fail="wifi_deinit";
+    EXPECT_EQ(network.start("ssid","p"),-3);
+    EXPECT_TRUE(state().wifi);EXPECT_FALSE(state().started);
+    EXPECT_EQ(state().interfaces,1);EXPECT_EQ(state().queues,1);
+    EXPECT_TRUE(state().handlers.empty());EXPECT_FALSE(network.available());
+    const auto creations=std::count(state().calls.begin(),state().calls.end(),"netif_create");
+    const auto stops=std::count(state().calls.begin(),state().calls.end(),"wifi_stop");
+    // Cleanup failed, so its cached stop result cannot establish the current
+    // driver state for the next cleanup attempt.
+    state().started=true;state().fail.clear();
+    ASSERT_EQ(network.start("ssid","p"),0);
+    EXPECT_EQ(std::count(state().calls.begin(),state().calls.end(),"wifi_stop"),stops+1);
+    EXPECT_EQ(std::count(state().calls.begin(),state().calls.end(),"netif_create"),creations+1);
+    EXPECT_EQ(state().handlers.size(),2u);EXPECT_EQ(state().interfaces,1);
+    EXPECT_EQ(state().queues,1);ASSERT_EQ(network.connect(),0);
+    got_ip(2);ASSERT_EQ(network.poll(),0);
+    EXPECT_EQ(changes,(std::vector<bool>{false,true,false,true}));
+}
+
+TEST_F(NetworkTest, StopAndFailedShutdownRecoverForNextOwnerWithoutLeaks) {
+    ready();emit(WIFI_EVENT,WIFI_EVENT_STA_STOP);ASSERT_EQ(network.poll(),0);
+    state().fail="wifi_deinit";EXPECT_EQ(network.deinit(),-3);
+    EXPECT_EQ(state().queues,0);EXPECT_EQ(state().interfaces,1);
+    EXPECT_TRUE(state().handlers.empty());EXPECT_TRUE(state().wifi);
+    state().started=true;state().fail.clear();
+    Network next;
+    ASSERT_EQ(next.init(),0);
+    EXPECT_FALSE(state().wifi);EXPECT_EQ(state().interfaces,0);
+    ASSERT_EQ(next.start("ssid","p"),0);ASSERT_EQ(next.connect(),0);
+    EXPECT_EQ(state().queues,1);EXPECT_EQ(state().interfaces,1);
+    EXPECT_EQ(state().handlers.size(),2u);
+    ASSERT_EQ(next.deinit(),0);
+    EXPECT_EQ(state().queues,0);EXPECT_EQ(state().interfaces,0);
+    EXPECT_TRUE(state().handlers.empty());EXPECT_FALSE(state().wifi);
+}

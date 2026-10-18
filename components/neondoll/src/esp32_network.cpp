@@ -22,7 +22,7 @@ struct Resources {
     QueueHandle_t queue = nullptr;
     esp_netif_t* netif = nullptr;
     esp_event_handler_instance_t wifi_handler = nullptr, ip_handler = nullptr;
-    bool own_loop = false, wifi = false, started = false;
+    bool own_loop = false, wifi = false;
 } resources;
 struct Ingress {
     std::mutex mutex;
@@ -66,15 +66,17 @@ int release_station() {
         auto err = esp_event_handler_instance_unregister(IP_EVENT, ESP_EVENT_ANY_ID, resources.ip_handler);
         check(err); if (err == ESP_OK) resources.ip_handler = nullptr;
     }
-    if (resources.started) {
+    if (resources.wifi) {
+        // Queued stop events and prior cleanup attempts do not establish the
+        // current driver state. Always stop before each deinit attempt.
         auto err = esp_wifi_stop();
         if (err == ESP_ERR_WIFI_NOT_STARTED) err = ESP_OK;
-        check(err); if (err == ESP_OK) resources.started = false;
+        check(err);
     }
     if (resources.wifi) {
         auto err = esp_wifi_deinit();
         check(err);
-        if (err == ESP_OK) { resources.wifi = false; resources.started = false; }
+        if (err == ESP_OK) resources.wifi = false;
     }
     if (!resources.wifi && resources.netif) {
         esp_netif_destroy_default_wifi(resources.netif); resources.netif = nullptr;
@@ -155,13 +157,9 @@ int Esp32NetworkAvailability::start(const char* ssid, const char* password, uint
         handle_event, reinterpret_cast<void*>(epoch_), &resources.wifi_handler);
     if (err == ESP_OK) err = esp_event_handler_instance_register(IP_EVENT, ESP_EVENT_ANY_ID,
         handle_event, reinterpret_cast<void*>(epoch_), &resources.ip_handler);
-    if (err == ESP_OK) {
-        // A failed start may still require stop before deinit.
-        resources.started = true;
-        err = esp_wifi_start();
-    }
+    if (err == ESP_OK) err = esp_wifi_start();
     if (err != ESP_OK) { release_station(); return failed(err); }
-    resources.started = true; started_ = true; desired_ = false;
+    started_ = true; desired_ = false;
     retry_limit_ = limit; retries_ = 0; error_ = 0;
     return 0;
 }
@@ -238,7 +236,7 @@ int Esp32NetworkAvailability::poll() {
             if (err != ESP_OK || !info.ip.addr) transition(false);
         } else {
             transition(false);
-            if (event.id == WIFI_EVENT_STA_STOP) { desired_ = false; started_ = false; resources.started = false; }
+            if (event.id == WIFI_EVENT_STA_STOP) { desired_ = false; started_ = false; }
             else if (desired_) {
                 if (retries_ < retry_limit_) {
                     ++retries_;

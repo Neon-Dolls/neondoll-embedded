@@ -4,6 +4,7 @@
 #define NEONDOLL_ESP32_PLATFORM_HPP
 #include <neondoll/platform.hpp>
 #include <nvs.h>
+#include <neondoll/esp32_network.hpp>
 
 namespace neondoll {
 /** NVS namespace "neondoll". Maps logical "neondoll/identity" to NVS "identity".
@@ -41,13 +42,6 @@ public:
     int init() override { return 0; }
     int deinit() override { return 0; }
     uint64_t now_ms() override;
-};
-/** M1 has no network monitor. Explicitly rejects callback registration until M2. */
-class Esp32NetworkAvailability : public NetworkAvailability {
-public:
-    int init() override { return 0; }
-    int deinit() override { return 0; }
-    int set_callback(Callback, void*) override { return -1; }
 };
 class Esp32Logger : public Logger {
 public:

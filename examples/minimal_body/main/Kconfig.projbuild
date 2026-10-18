@@ -1,0 +1,16 @@
+menu "NeonDoll example"
+    config NEONDOLL_WIFI_ENABLE
+        bool "Enable M2.1 Wi-Fi station example"
+        default n
+        help
+            Start Wi-Fi after persistent identity initialization succeeds.
+            Leave disabled for identity-only testing and QEMU.
+    config NEONDOLL_WIFI_SSID
+        string "Wi-Fi SSID"
+        depends on NEONDOLL_WIFI_ENABLE
+        default ""
+    config NEONDOLL_WIFI_PASSWORD
+        string "Wi-Fi password (empty for open AP)"
+        depends on NEONDOLL_WIFI_ENABLE
+        default ""
+endmenu

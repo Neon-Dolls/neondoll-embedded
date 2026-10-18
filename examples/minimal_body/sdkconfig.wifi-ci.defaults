@@ -1,0 +1,4 @@
+# Compile-only profile; these are dummy credentials, not a usable network.
+CONFIG_NEONDOLL_WIFI_ENABLE=y
+CONFIG_NEONDOLL_WIFI_SSID="ci-test-ssid"
+CONFIG_NEONDOLL_WIFI_PASSWORD="ci-test-password"

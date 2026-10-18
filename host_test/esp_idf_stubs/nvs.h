@@ -1,9 +1,9 @@
 #pragma once
 #include <cstddef>
 #include <cstdint>
-using esp_err_t = int;
+#include "esp_err.h"
 using nvs_handle_t = uint32_t;
-constexpr int ESP_OK=0, ESP_FAIL=-1, ESP_ERR_NVS_NOT_FOUND=1,
+constexpr int ESP_ERR_NVS_NOT_FOUND=1,
     ESP_ERR_NVS_TYPE_MISMATCH=2, ESP_ERR_NVS_INVALID_LENGTH=3,
     ESP_ERR_NVS_NO_FREE_PAGES=4, ESP_ERR_NVS_NEW_VERSION_FOUND=5;
 constexpr int NVS_READWRITE=1;

@@ -24,6 +24,13 @@ jobs:
           . /opt/esp/idf/export.sh
           idf.py -C examples/minimal_body build
           python integration/qemu_identity.py examples/minimal_body/build
+      - name: Build Wi-Fi-enabled example
+        shell: bash
+        run: |
+          . /opt/esp/idf/export.sh
+          idf.py -C examples/minimal_body -B "$PWD/examples/minimal_body/build/wifi" \
+            -D SDKCONFIG="$PWD/examples/minimal_body/build/sdkconfig.wifi" \
+            -D SDKCONFIG_DEFAULTS="$PWD/examples/minimal_body/sdkconfig.wifi-ci.defaults" build
       - uses: actions/upload-artifact@v4
         with:
           name: minimal-body-esp32
@@ -31,3 +38,4 @@ jobs:
             examples/minimal_body/build/minimal_body.bin
             examples/minimal_body/build/minimal_body.elf
             examples/minimal_body/build/qemu-boot-*.log
+            examples/minimal_body/build/wifi/minimal_body.bin

@@ -1,5 +1,9 @@
 idf_component_register(SRCS "src/neondoll.cpp"
-                     "src/identity.cpp"
-                     "src/identity_storage.cpp"
-                     INCLUDE_DIRS "include"
-                     REQUIRES esp_system)
+                           "src/identity.cpp"
+                           "src/identity_storage.cpp"
+                           "src/esp32_platform.cpp"
+                       INCLUDE_DIRS "include"
+                       REQUIRES esp_system nvs_flash esp_timer bootloader_support log)
+target_compile_features(${COMPONENT_LIB} PUBLIC cxx_std_17)
+
+set_target_properties(${COMPONENT_LIB} PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO)

@@ -27,22 +27,26 @@ public:
         if (!initialized_) return -2;
         auto it = storage_.find(key);
         if (it == storage_.end()) return -1;
-        size_t copy_len = std::min(max_size, it->second.size());
+        if (it->second.size() > max_size) return -2;
+        size_t copy_len = it->second.size();
         memcpy(out, it->second.data(), copy_len);
         return static_cast<std::ptrdiff_t>(copy_len);
     }
     int write(const char* key, const void* in, size_t size) override {
         if (!initialized_) return -2;
+        if (fail_write_) return -3;
         storage_[key] = std::string(static_cast<const char*>(in), size);
-        return static_cast<int>(size);
+        return 0;
     }
     
     void set_fail_init(bool fail) { fail_init_ = fail; }
     void clear() { storage_.clear(); }
+    void set_fail_write(bool fail) { fail_write_ = fail; }
     
 private:
     bool initialized_;
     bool fail_init_;
+    bool fail_write_ = false;
     std::map<std::string, std::string> storage_;
 };
 
@@ -64,7 +68,7 @@ public:
         for (size_t i = 0; i < len; ++i) {
             static_cast<uint8_t*>(out)[i] = static_cast<uint8_t>(i);
         }
-        return static_cast<int>(len);
+        return 0;
     }
     
     void set_fail_init(bool fail) { fail_init_ = fail; }
@@ -79,7 +83,7 @@ private:
 
 class MockClock : public Clock {
 public:
-    MockClock() : initialized_(false), now_ms_return_(0) {}
+    MockClock() : now_ms_return_(0), initialized_(false) {}
     virtual ~MockClock() { if (initialized_) deinit(); }
     int init() override { ++init_calls_; return init_return_; }
     int deinit() override { ++deinit_calls_; return deinit_return_; }
@@ -97,7 +101,7 @@ private:
 
 class MockNetwork : public NetworkAvailability {
 public:
-    MockNetwork() : initialized_(false), available_return_(true) {}
+    MockNetwork() : available_return_(true), initialized_(false) {}
     virtual ~MockNetwork() { if (initialized_) deinit(); }
     int init() override { ++init_calls_; return init_return_; }
     int deinit() override { ++deinit_calls_; return deinit_return_; }
@@ -193,7 +197,7 @@ TEST_F(NeondollIdentityTest, FirstBootCreatesIdentity) {
     
     // Verify it's a valid identity string (simplified check)
     std::string id_str(buf);
-    EXPECT_NE(id_str.find("v1:"), std::string::npos);
+    EXPECT_NE(id_str.find("v2:"), std::string::npos);
     EXPECT_NE(id_str.find(":0:"), std::string::npos); // counter should be 0
 }
 
@@ -258,17 +262,10 @@ TEST_F(NeondollIdentityTest, StorageInitFailure) {
 }
 
 TEST_F(NeondollIdentityTest, StorageWriteFailure) {
-    // First boot succeeds
-    EXPECT_EQ(neondoll_init(&ctx_), 0);
-    EXPECT_TRUE(ctx_.initialized);
-    
-    // Simulate storage failure on second init (would try to verify/save)
-    storage_.set_fail_init(true);
-    ctx_.initialized = false;
-    
-    // Second boot should fail
-    EXPECT_NE(neondoll_init(&ctx_), 0);
+    storage_.set_fail_write(true);
+    EXPECT_EQ(neondoll_init(&ctx_), -10);
     EXPECT_FALSE(ctx_.initialized);
+    EXPECT_EQ(neondoll_get_identity(&ctx_), nullptr);
 }
 
 TEST_F(NeondollIdentityTest, EntropyInitFailure) {

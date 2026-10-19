@@ -56,7 +56,12 @@ err_t wireguardif_connect(struct netif *n,u8_t i) {
 #include "esp_wireguard.c"
 #undef wireguard_peer_index
 
-static struct netif underlay;
+static struct netif underlay, replacement;
+static struct netif *active_underlay = &underlay;
+static netif_ext_callback_t *ext_callbacks;
+static int callbacks, bindings, sends, sent_index, sent_type;
+static ip4_addr_t sent_source;
+
 struct netif *netif_default = &underlay;
 static uint8_t wire[2048], delivered[2048];
 static size_t wire_length, delivered_length;
@@ -67,7 +72,12 @@ static char address_text[64], prefix_text[64], mask_text[64];
 static wireguard_config_t config;
 
 uint32_t wireguard_sys_now(void) { return fake_now; }
-void wireguard_random_bytes(void *bytes, size_t size) { memset(bytes, 0x19, size); }
+void wireguard_random_bytes(void *bytes, size_t size) {
+    // Deterministic, but distinct indices across real handshake retries. A constant
+    // RNG would make the upstream unique-peer-index loop spin on its own index.
+    static uint32_t sequence;
+    ++sequence;for(size_t i=0;i<size;++i)((uint8_t *)bytes)[i]=(uint8_t)(sequence>>(8*(i%4)))^(uint8_t)i;
+}
 void wireguard_tai64n_now(uint8_t *out) { memset(out, 0, 12); }
 bool wireguard_is_under_load(void) { return false; }
 esp_err_t wireguard_platform_init(void) { require_lock();if(!strcmp(fault,"platform"))return ESP_FAIL;platform_live=1;return ESP_OK; }
@@ -75,12 +85,25 @@ void wireguard_platform_deinit(void) { require_lock();platform_live=0; }
 const char *esp_err_to_name(int e) { (void)e; return "test"; }
 esp_netif_t *esp_netif_get_handle_from_ifkey(const char *key) { (void)key; static esp_netif_t n; return present?&n:NULL; }
 esp_err_t esp_netif_get_netif_impl_name(esp_netif_t *n, char *name) { (void)n; assert(core_depth == 0); strcpy(name, "st0"); return ESP_OK; }
-struct netif *netif_find(const char *name) { (void)name; require_lock();return present?&underlay:NULL; }
+struct netif *netif_find(const char *name) { (void)name; require_lock();return present?active_underlay:NULL; }
 void netif_set_up(struct netif *n) { require_lock(); n->flags |= NETIF_FLAG_UP; }
 void netif_set_link_up(struct netif *n) { n->flags |= NETIF_FLAG_LINK_UP; }
 void netif_set_link_down(struct netif *n) { n->flags &= ~NETIF_FLAG_LINK_UP; }
 void netif_set_default(struct netif *n) { netif_default = n; }
-void netif_remove(struct netif *n) { require_lock();assert(interfaces>0);--interfaces;if(latest==n)latest=NULL; }
+void netif_add_ext_callback(netif_ext_callback_t *cb, netif_ext_callback_fn fn) {
+    require_lock();assert(!ext_callbacks);cb->callback_fn=fn;cb->next=ext_callbacks;ext_callbacks=cb;++callbacks;
+}
+void netif_remove_ext_callback(netif_ext_callback_t *cb) {
+    require_lock();assert(ext_callbacks==cb);ext_callbacks=cb->next;--callbacks;
+}
+void netif_invoke_ext_callback(struct netif *n,netif_nsc_reason_t reason,const netif_ext_callback_args_t *args) {
+    require_lock();for(netif_ext_callback_t *cb=ext_callbacks;cb;cb=cb->next)cb->callback_fn(n,reason,args);
+}
+void netif_remove(struct netif *n) {
+    require_lock();netif_invoke_ext_callback(n,LWIP_NSC_NETIF_REMOVED,NULL);
+    if(n==active_underlay){assert(present);present=0;return;}
+    assert(interfaces>0);--interfaces;if(latest==n)latest=NULL;
+}
 void netif_ip6_addr_set(struct netif *n, s8_t i, const ip6_addr_t *a) { ip_addr_copy_from_ip6(n->ip6_addr[i], *a); }
 void netif_ip6_addr_set_state(struct netif *n, s8_t i, u8_t state) { n->ip6_addr_state[i] = state; }
 struct netif *netif_add(struct netif *n, const ip4_addr_t *a, const ip4_addr_t *m,
@@ -94,12 +117,20 @@ struct netif *netif_add(struct netif *n, const ip4_addr_t *a, const ip4_addr_t *
 }
 struct udp_pcb *udp_new_ip_type(u8_t type) { (void)type;require_lock();if(!strcmp(fault,"udp"))return NULL;++udps;return calloc(1, sizeof(struct udp_pcb)); }
 err_t udp_bind(struct udp_pcb *p, const ip_addr_t *a, u16_t port) { (void)p;(void)a;(void)port;require_lock();return !strcmp(fault,"bind")?ERR_IF:ERR_OK; }
-void udp_bind_netif(struct udp_pcb *p, const struct netif *n) { require_lock();p->netif_idx=netif_get_index(n); }
+void udp_bind_netif(struct udp_pcb *p, const struct netif *n) {
+    require_lock();assert(n==active_underlay && present);assert(p->netif_idx==NETIF_NO_INDEX);
+    p->netif_idx=netif_get_index(n);assert(p->netif_idx!=NETIF_NO_INDEX);++bindings;
+}
 void udp_disconnect(struct udp_pcb *p) { (void)p; }
 void udp_remove(struct udp_pcb *p) { require_lock();assert(udps>0);--udps;free(p); }
-void udp_recv(struct udp_pcb *p, udp_recv_fn recv, void *arg) { p->recv=recv;p->recv_arg=arg; }
+void udp_recv(struct udp_pcb *p, udp_recv_fn recv, void *arg) {
+    require_lock();if(recv)assert(p->netif_idx!=NETIF_NO_INDEX);p->recv=recv;p->recv_arg=arg;
+}
 err_t udp_sendto_if(struct udp_pcb *p, struct pbuf *q, const ip_addr_t *ip, u16_t port, struct netif *n) {
-    (void)p;(void)port;assert(n == &underlay);
+    require_lock();assert(present && n==active_underlay);
+    assert(p->netif_idx==netif_get_index(n) && p->netif_idx!=NETIF_NO_INDEX);
+    assert(port==51820);++sends;sent_index=netif_get_index(n);sent_source=*netif_ip4_addr(n);
+    uint8_t type=0;pbuf_copy_partial(q,&type,1,0);sent_type=type;
     outer4=IP_IS_V4(ip);wire_length=q->tot_len;assert(wire_length<=sizeof(wire));
     pbuf_copy_partial(q,wire,wire_length,0);return ERR_OK;
 }
@@ -182,7 +213,7 @@ size_t nd_validate_ip6_length(const uint8_t *header,size_t bytes,int padded) {
     return nd_ip6_length(header,bytes,padded!=0);
 }
 
-struct netif *netif_get_by_index(u8_t index) { require_lock();return present && index==netif_get_index(&underlay)?&underlay:NULL; }
+struct netif *netif_get_by_index(u8_t index) { require_lock();return present && index==netif_get_index(active_underlay)?active_underlay:NULL; }
 void nd_core_lock(void) { assert(core_depth==0);++core_depth; }
 void nd_core_unlock(void) { assert(core_depth==1);--core_depth; }
 void *nd_device_calloc(size_t n,size_t size) {
@@ -207,16 +238,54 @@ int mbedtls_base64_encode(unsigned char *out,size_t max,size_t *len,const unsign
     *len=max;return wireguard_base64_encode(in,size,(char *)out,len)?0:-1;
 }
 void nd_backend_reset(void) {
-    assert(!devices&&!udps&&!interfaces&&!timers&&!platform_live);require_core=1;fault="";present=1;
-    zeroizations=decoded_wipes=0;fake_now=1000;underlay.flags=NETIF_FLAG_UP|NETIF_FLAG_LINK_UP;
-    ip4addr_aton("192.0.2.2",ip_2_ip4(&underlay.ip_addr));
+    assert(!devices&&!udps&&!interfaces&&!timers&&!platform_live&&!callbacks&&!ext_callbacks);require_core=1;fault="";present=1;
+    zeroizations=decoded_wipes=bindings=sends=sent_index=sent_type=0;fake_now=1000;
+    // Selected station deliberately differs from the default interface.
+    active_underlay=&replacement;memset(active_underlay,0,sizeof(*active_underlay));
+    active_underlay->num=3;active_underlay->flags=NETIF_FLAG_UP|NETIF_FLAG_LINK_UP;
+    ip4addr_aton("192.0.2.2",ip_2_ip4(&active_underlay->ip_addr));
 }
 void nd_backend_fault(const char *name) { fault=name; }
 void nd_backend_clock(uint32_t now) { fake_now=now; }
-int nd_backend_resources(void) { return devices+udps+interfaces+timers+platform_live; }
+int nd_backend_resources(void) { return devices+udps+interfaces+timers+platform_live+callbacks; }
 int nd_backend_zeroizations(void) { return zeroizations; }
 int nd_backend_decoded_wipes(void) { return decoded_wipes; }
-void nd_backend_underlay(int enabled) { present=enabled; }
+void nd_backend_underlay(int enabled) {
+    nd_core_lock();if(!enabled && present)netif_remove(active_underlay);else present=enabled;nd_core_unlock();
+}
+void nd_backend_replace_underlay(int same_address,int same_index) {
+    nd_core_lock();u8_t old_num=active_underlay->num;
+    netif_remove(active_underlay);
+    if(!same_address)active_underlay=active_underlay==&underlay?&replacement:&underlay;
+    memset(active_underlay,0,sizeof(*active_underlay));
+    active_underlay->num=same_index?old_num:(u8_t)(old_num+1);
+    active_underlay->flags=NETIF_FLAG_UP|NETIF_FLAG_LINK_UP;
+    ip4addr_aton("198.51.100.2",ip_2_ip4(&active_underlay->ip_addr));present=1;nd_core_unlock();
+}
+int nd_backend_bound(void) {
+    nd_core_lock();struct wireguard_device *d=latest->state;
+    int bound=d->udp_pcb->netif_idx==netif_get_index(active_underlay) &&
+        d->underlying_netif==active_underlay && d->udp_pcb->recv!=NULL && present;
+    nd_core_unlock();return bound;
+}
+int nd_backend_receive_enabled(void) {
+    nd_core_lock();struct wireguard_device *d=latest->state;
+    int enabled=d->udp_pcb->recv!=NULL;nd_core_unlock();return enabled;
+}
+int nd_backend_bindings(void) { return bindings; }
+int nd_backend_sends(void) { return sends; }
+int nd_backend_handshake_sent(void) {
+    return sends && outer4 && sent_type==MESSAGE_HANDSHAKE_INITIATION &&
+        wire_length==sizeof(struct message_handshake_initiation) &&
+        sent_index==netif_get_index(active_underlay) && ip4_addr_cmp(&sent_source,netif_ip4_addr(active_underlay));
+}
+int nd_backend_direct_output(int device_output) {
+    nd_core_lock();struct wireguard_device *d=latest->state;
+    struct pbuf *q=pbuf_alloc(PBUF_RAW,1,PBUF_RAM);assert(q);pbuf_put_at(q,0,0);
+    int result=device_output?wireguardif_device_output(d,q,&d->peers[0].ip,51820):
+        wireguardif_peer_output(latest,q,&d->peers[0]);
+    pbuf_free(q);nd_core_unlock();return result;
+}
 void nd_backend_peer_keys(void) {
     nd_core_lock();struct wireguard_device *device=latest->state;
     struct wireguard_keypair *k=&device->peers[0].curr_keypair;memset(k,0,sizeof(*k));

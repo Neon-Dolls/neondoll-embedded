@@ -40,7 +40,18 @@ until tunnel shutdown; call transport `poll` after recovery `poll`.
 ESP-NETIF IPC resolves the station name before taking the core lock. All raw lwIP
 interface, UDP, peer, timer, status and cleanup operations hold that lock, serializing
 against receive/timer callbacks. Explicit vendor binding bypasses its fallback
-ESP-NETIF lookup under the lock. No queued backend callback can outlive the object.
+ESP-NETIF lookup under the lock. The pinned upstream already bound its UDP PCB;
+the patch now makes that binding explicit immediately after `udp_bind`, before
+device publication, input registration or timers. The output guard rejects a
+missing/zero-index binding.
+
+A core-serialized extended netif callback latches underlay removal by clearing the
+cached underlay and detaching the UDP receive callback. Even a replacement with
+the same pointer **and** index cannot inherit the old tunnel's input/output or
+readiness. Only stop/start creates and binds a new PCB. Shutdown unregisters the
+removal listener before freeing any device state; partial-start failures use the
+same path. No queued backend callback can outlive the object. ESP-IDF 5.2.1 enables
+`LWIP_NETIF_EXT_STATUS_CALLBACK`; the backend requires it at compile time.
 
 There is one statically owned netif slot and one peer. Repeated `start` while active,
 or another owner's `start`, returns `-2` without reconfiguration. Invalid config or
@@ -75,18 +86,20 @@ and scoped/link-local endpoint provisioning are outside this adapter.
 Host suites compile the actual patched interface/crypto with lwIP 2.1.3 and libsodium;
 ESP-NETIF, allocator/timer and entropy boundaries are stubbed. Tests cover ten
 initialization failure points, cleanup/recovery, 1,000 lifecycle cycles, two-owner
-exclusion, IPv6 addresses/prefixes, IPv4 outer endpoint, stale underlay rejection,
+exclusion, IPv6 addresses/prefixes, IPv4 outer endpoint, actual initial handshake
+output on a selected IPv4 underlay that differs from the default, removal and all
+pointer/index reuse combinations, receive detachment and restart rebinding,
 M3.1 network-loss/explicit-stop behavior, authenticated receive vs tampering, and
 readiness expiry across clock wrap. Separate tests exercise the real patched
 platform cleanup with injected mbedTLS failures and repeated erasure. These tests
-are not a real handshake or a concurrency stress test.
+do not complete a real-peer handshake or perform a concurrency stress test.
 
 Recorded validation for this implementation:
 
-- **153 host tests in eight CTest suites passed**, including existing M1–M3 and
+- **156 host tests in eight CTest suites passed**, including existing M1–M3 and
   20 patched IPv6 packet tests; the same suites passed ASan/UBSan with leak detection.
 - ESP-IDF 5.2.1 classic ESP32 builds passed for default, Wi-Fi-only and production
-  WireGuard configurations. Backend image: 901,520 bytes (14% app partition free).
+  WireGuard configurations. Backend image: 901,600 bytes (14% app partition free).
 - QEMU identity regression passed: the same Body ID across three emulated boots.
   QEMU provides no RF/tunnel interoperability evidence.
 - Patch preparation verified the pinned archive and exact eight-file delta;

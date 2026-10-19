@@ -6,13 +6,14 @@ extern "C" {
 #include <esp_netif.h>
 #include <lwip/tcpip.h>
 #include <lwip/ip.h>
+#include <lwip/udp.h>
 #include <mbedtls/base64.h>
 #include <mbedtls/platform_util.h>
 #include <wireguardif.h>
 #include <wireguard.h>
 }
-#if !LWIP_TCPIP_CORE_LOCKING || !LWIP_IPV6 || !LWIP_IPV6_ADDRESS_LIFETIMES
-#error "WireGuard requires TCP/IP core locking, IPv6 and address lifetimes"
+#if !LWIP_TCPIP_CORE_LOCKING || !LWIP_IPV6 || !LWIP_IPV6_ADDRESS_LIFETIMES || !LWIP_NETIF_EXT_STATUS_CALLBACK
+#error "WireGuard requires TCP/IP core locking, IPv6 address lifetimes and netif removal callbacks"
 #endif
 static_assert(WIREGUARD_MAX_SRC_IPS >= 4, "Build vendor and consumer with four AllowedIPs slots");
 static_assert(LWIP_IPV6_NUM_ADDRESSES >= 2, "Two tunnel addresses require two lwIP address slots");
@@ -52,6 +53,18 @@ struct Esp32WireGuardBackend::Impl {
     netif interface{};
     bool used = false, added = false;
     uint8_t peer_index = WIREGUARDIF_INVALID_INDEX;
+    netif_ext_callback_t removal_callback{};
+    static void underlay_changed(netif* removed, netif_nsc_reason_t reason,
+                                 const netif_ext_callback_args_t*) {
+        if (!(reason & LWIP_NSC_NETIF_REMOVED) || !slot_.added) return;
+        auto* device = static_cast<wireguard_device*>(slot_.interface.state);
+        if (device && device->underlying_netif == removed) {
+            // Removal is synchronous under the core lock, before the netif can
+            // be freed/reused. Latch invalid even if BOTH pointer/index recur.
+            device->underlying_netif = nullptr;
+            udp_recv(device->udp_pcb, nullptr, nullptr);
+        }
+    }
 };
 Esp32WireGuardBackend::Impl Esp32WireGuardBackend::slot_{};
 Esp32WireGuardBackend::~Esp32WireGuardBackend() { stop(); }
@@ -59,6 +72,7 @@ void Esp32WireGuardBackend::release_locked() {
     if (impl_->added) {
         // Serialized against timers/UDP input. Unregister their references BEFORE
         // removing/wiping the interface; vendor fini wipes the entire device.
+        netif_remove_ext_callback(&impl_->removal_callback);
         wireguardif_shutdown(&impl_->interface);
         netif_remove(&impl_->interface);
         wireguardif_fini(&impl_->interface);
@@ -98,6 +112,7 @@ int Esp32WireGuardBackend::start(const WireGuardConfig& config) {
     if (!netif_add(&impl_->interface, &zero, &zero, &zero, &temporary.init, wireguardif_init, ip_input))
         return fail(ERR_IF); // Vendor init releases any partial UDP/device allocations.
     impl_->added = true;
+    netif_add_ext_callback(&impl_->removal_callback, Impl::underlay_changed);
     for (size_t i = 0; i < config.address_count; ++i) {
         const auto address = ipv6(config.addresses[i].address);
         netif_ip6_addr_set(&impl_->interface, i, ip_2_ip6(&address));

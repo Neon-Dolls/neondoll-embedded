@@ -27,6 +27,43 @@ TEST_F(BackendTest, StartsOfflineUntilAuthenticatedPacketNotWifiOrKeyInitializat
     nd_backend_clock(181000);EXPECT_EQ(backend.status(),WireGuardBackend::State::starting);
     EXPECT_GT(nd_backend_zeroizations(),0);EXPECT_GT(nd_backend_decoded_wipes(),0);
 }
+TEST_F(BackendTest, ActualInitializationBindsPcbBeforeInitialIpv4Handshake) {
+    auto c=config();ASSERT_EQ(backend.start(c),0);
+    EXPECT_EQ(nd_backend_bindings(),1);EXPECT_TRUE(nd_backend_bound());
+    EXPECT_EQ(nd_backend_sends(),0); // connect arms intent; real WG timer emits the handshake.
+    ASSERT_TRUE(nd_backend_tick());
+    EXPECT_EQ(nd_backend_sends(),1);EXPECT_TRUE(nd_backend_handshake_sent());
+    EXPECT_EQ(backend.status(),WireGuardBackend::State::starting);
+}
+TEST_F(BackendTest, RemovedUnderlayRejectsBothOutputPathsAndDisablesReceive) {
+    auto c=config();ASSERT_EQ(backend.start(c),0);ASSERT_TRUE(nd_backend_tick());
+    const int sends=nd_backend_sends();nd_backend_underlay(0);
+    EXPECT_FALSE(nd_backend_bound());EXPECT_FALSE(nd_backend_receive_enabled());
+    EXPECT_NE(nd_backend_direct_output(0),0);EXPECT_NE(nd_backend_direct_output(1),0);
+    nd_backend_clock(8000);ASSERT_TRUE(nd_backend_tick());EXPECT_EQ(nd_backend_sends(),sends);
+    EXPECT_EQ(backend.stop(),0);EXPECT_EQ(nd_backend_resources(),0);
+}
+TEST_F(BackendTest, ReplacementCannotInheritBindingEvenWhenPointerAndIndexAreReused) {
+    for(int same_address:{0,1})for(int same_index:{0,1}) {
+        SCOPED_TRACE(testing::Message()<<"same address="<<same_address<<", same index="<<same_index);
+        auto c=config();const int binds=nd_backend_bindings();
+        ASSERT_EQ(backend.start(c),0);ASSERT_TRUE(nd_backend_tick());
+        ASSERT_TRUE(nd_backend_handshake_sent());const int sends=nd_backend_sends();
+        nd_backend_peer_keys();ASSERT_TRUE(nd_backend_authenticate(0));
+        ASSERT_EQ(backend.status(),WireGuardBackend::State::up);
+        nd_backend_replace_underlay(same_address,same_index);
+        EXPECT_FALSE(nd_backend_bound());EXPECT_FALSE(nd_backend_receive_enabled());
+        EXPECT_EQ(backend.status(),WireGuardBackend::State::starting);
+        EXPECT_NE(nd_backend_direct_output(0),0);EXPECT_NE(nd_backend_direct_output(1),0);
+        ASSERT_TRUE(nd_backend_tick());EXPECT_EQ(nd_backend_sends(),sends);
+        ASSERT_EQ(backend.stop(),0);ASSERT_EQ(nd_backend_resources(),0);
+        // Only a clean restart creates a new PCB bound to the replacement.
+        ASSERT_EQ(backend.start(c),0);EXPECT_EQ(nd_backend_bindings(),binds+2);
+        EXPECT_TRUE(nd_backend_bound());EXPECT_TRUE(nd_backend_receive_enabled());
+        ASSERT_TRUE(nd_backend_tick());EXPECT_EQ(nd_backend_sends(),sends+1);
+        EXPECT_TRUE(nd_backend_handshake_sent());ASSERT_EQ(backend.stop(),0);
+    }
+}
 TEST_F(BackendTest, PreservesBothAddressesPartialByteMaskAndIpv4Endpoint) {
     auto c=config();ASSERT_EQ(backend.start(c),0);EXPECT_TRUE(nd_backend_configured());
 }

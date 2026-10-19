@@ -28,6 +28,13 @@ int nd_backend_decoded_wipes(void);
 void nd_backend_underlay(int present);
 int nd_backend_tick(void);
 int nd_backend_configured(void);
+void nd_backend_replace_underlay(int same_address,int same_index);
+int nd_backend_bound(void);
+int nd_backend_receive_enabled(void);
+int nd_backend_bindings(void);
+int nd_backend_sends(void);
+int nd_backend_handshake_sent(void);
+int nd_backend_direct_output(int device_output);
 #ifdef __cplusplus
 }
 #endif

@@ -6,9 +6,9 @@
 namespace neondoll {
 /** One peer/one active instance. Enable with the verified WIREGUARD_SOURCE_DIR.
  * Single application owner task; never call from TCP/IP callbacks or while holding
- * its core lock. TCP/IP and Wi-Fi station must outlive this object. Construction
- * does no I/O; call start only after M1 and station/IP startup. Use the M3.1
- * transport's poll after M2 recovery.poll to stop on loss/change and allow recovery.
+ * its core lock. TCP/IP must outlive this object; station removal invalidates
+ * its binding until restart. Construction does no I/O; start after M1 and station/IP
+ * startup. Poll the M3.1 transport after M2 recovery.poll to handle loss/recovery.
  * No DNS, station management, default routes or application reconnect timers.
  */
 class Esp32WireGuardBackend final : public WireGuardBackend {

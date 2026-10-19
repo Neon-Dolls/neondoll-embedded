@@ -174,6 +174,55 @@ TEST_F(RecoveryTest, FailedIntentionalDisconnectDoesNotEnableRetries) {
     port.disconnect_error=0;ASSERT_EQ(supervisor.request_recovery(),0);
     EXPECT_EQ(supervisor.poll(),0);EXPECT_EQ(port.connects,2);
 }
+TEST_F(RecoveryTest, FailedStopBlocksRestartUntilCleanupAndExplicitStationStart) {
+    connecting();
+    port.stop_error=-3;
+    ASSERT_EQ(supervisor.stop(),-3);
+    for(bool running:{false,true}) {
+        port.running_=running;
+        EXPECT_EQ(supervisor.start(),-2);
+        EXPECT_EQ(supervisor.last_error(),-3);
+        EXPECT_EQ(supervisor.request_recovery(),-1);
+        clock.now+=100000;
+        EXPECT_EQ(supervisor.poll(),0);
+        EXPECT_EQ(supervisor.state(),State::stopped);
+        EXPECT_EQ(port.connects,1);
+    }
+    EXPECT_EQ(supervisor.stop(),-3);
+    port.running_=true;
+    EXPECT_EQ(supervisor.start(),-2);
+    EXPECT_EQ(port.stops,2);
+    port.stop_error=0;
+    ASSERT_EQ(supervisor.stop(),0);
+    EXPECT_EQ(port.stops,3);
+    EXPECT_EQ(supervisor.start(),-1); // Cleanup does not start the station.
+    EXPECT_EQ(supervisor.poll(),0);
+    EXPECT_EQ(port.connects,1);
+    port.running_=true; // Application explicitly starts the station.
+    ASSERT_EQ(supervisor.start(),0);
+    EXPECT_EQ(port.connects,1);
+    ASSERT_EQ(supervisor.poll(),0);
+    EXPECT_EQ(port.connects,2);
+    port.up=true;
+    EXPECT_EQ(supervisor.poll(),0);
+    EXPECT_EQ(supervisor.state(),State::online);
+}
+TEST(RecoveryPolicy, BlockedRestartRetainsDestructorCleanupObligation) {
+    Port port;Clock clock;
+    {
+        Supervisor supervisor{port,clock};
+        ASSERT_EQ(supervisor.start(),0);
+        port.stop_error=-3;
+        ASSERT_EQ(supervisor.stop(),-3);
+        port.running_=true;
+        EXPECT_EQ(supervisor.start(),-2);
+        EXPECT_EQ(supervisor.poll(),0);
+        EXPECT_EQ(port.connects,0);
+        port.stop_error=0;
+    }
+    EXPECT_EQ(port.stops,2);
+    EXPECT_FALSE(port.running_);
+}
 TEST(RecoveryPolicy, InvalidBoundsAndStoppedStationAreRejectedWithoutNetworkCalls) {
     for(const neondoll::NetworkRecoveryPolicy policy: {neondoll::NetworkRecoveryPolicy{0,10,10},
         neondoll::NetworkRecoveryPolicy{10,9,10},neondoll::NetworkRecoveryPolicy{1,10,0}}) {

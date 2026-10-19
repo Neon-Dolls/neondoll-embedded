@@ -21,7 +21,7 @@ void NetworkSupervisor::sample_clock() {
     last_clock_ = now;
 }
 int NetworkSupervisor::start() {
-    if (polling_ || state_ != State::stopped) return -2;
+    if (polling_ || state_ != State::stopped || cleanup_pending_) return -2;
     if (!policy_.initial_delay_ms || policy_.maximum_delay_ms < policy_.initial_delay_ms ||
         !policy_.connection_timeout_ms || !network_.running()) return -1;
     reset_policy();
@@ -51,6 +51,7 @@ int NetworkSupervisor::stop() {
     if (!owned_) return 0;
     const auto result = network_.stop();
     owned_ = result != 0; // Failed teardown can be retried, never a reason to reconnect.
+    cleanup_pending_ = result != 0; // running() alone cannot prove teardown completed.
     error_ = result;
     return result;
 }

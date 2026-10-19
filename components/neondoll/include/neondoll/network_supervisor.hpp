@@ -42,7 +42,7 @@ public:
     int start(); // Enable policy; first connect is deferred to poll().
     int request_recovery(); // Coalesced immediate retry from paused/backoff.
     int disconnect(); // Intentional pause; no automatic reconnect.
-    int stop(); // Cancel policy first, then stop driver. Requires new start().
+    int stop(); // Cancel policy first; failure blocks start() until stop() succeeds.
     int poll(); // At most one connect per call. No blocking/timer tasks.
     State state() const { return state_; }
     uint64_t retry_delay_ms() const { return wait_ms_; }
@@ -57,6 +57,7 @@ private:
     NetworkRecoveryPolicy policy_;
     State state_ = State::stopped;
     bool owned_ = false, polling_ = false, manual_ = false, cancel_pending_ = false;
+    bool cleanup_pending_ = false;
     uint64_t last_clock_ = 0, elapsed_ = 0, wait_ms_ = 0, next_delay_ = 0, seen_epoch_ = 0;
     uint32_t failures_ = 0;
     int error_ = 0;

@@ -7,7 +7,8 @@ include(CTest)
 add_library(neondoll components/neondoll/src/neondoll.cpp
                      components/neondoll/src/identity.cpp
                      components/neondoll/src/identity_storage.cpp
-                     components/neondoll/src/network_supervisor.cpp)
+                     components/neondoll/src/network_supervisor.cpp
+                     components/neondoll/src/wireguard_transport.cpp)
 target_include_directories(neondoll PUBLIC components/neondoll/include)
 target_compile_options(neondoll PRIVATE -Wall -Wextra -Werror -pedantic)
 if(BUILD_TESTING)
@@ -19,6 +20,9 @@ if(BUILD_TESTING)
     add_executable(network_supervisor_tests host_test/test_network_supervisor.cpp)
     target_link_libraries(network_supervisor_tests PRIVATE neondoll GTest::gtest_main)
     add_test(NAME network_recovery_policy COMMAND network_supervisor_tests)
+    add_executable(wireguard_transport_tests host_test/test_wireguard_transport.cpp)
+    target_link_libraries(wireguard_transport_tests PRIVATE neondoll GTest::gtest_main)
+    add_test(NAME wireguard_transport_lifecycle COMMAND wireguard_transport_tests)
     add_executable(neondoll_tests host_test/test_neondoll.cpp
                                  host_test/test_neondoll_identity.cpp
                                  host_test/test_identity_faults.cpp)

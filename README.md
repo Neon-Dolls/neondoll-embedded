@@ -21,3 +21,6 @@ WireGuard transport configuration/lifecycle foundation and deferred backend gate
 
 Isolated IPv6 interface patch against pinned ESPHome WireGuard v0.4.8:
 [M3.2a acceptance](docs/M3_2A_IPV6.md). M3.2 and real-peer proof remain incomplete.
+
+Pinned ESPHome backend evaluation and unresolved IPv6 blockers:
+[M3.2 feasibility](docs/M3_2_FEASIBILITY.md). M3.2 remains incomplete.

@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 #include <neondoll/esp32_network.hpp>
+#include <neondoll/wireguard_transport.hpp>
 #include "network_fake.hpp"
 #include <algorithm>
 #include <atomic>
@@ -408,4 +409,46 @@ TEST_F(NetworkTest, SupervisorSeesTransientIpAcquisitionWithoutReplacingCallback
     EXPECT_EQ(recovery.poll(),-3);EXPECT_EQ(recovery.retry_delay_ms(),10u);
     EXPECT_EQ(recovery.failures(),1u);
     EXPECT_EQ(changes,(std::vector<bool>{false,true,false}));
+}
+
+TEST_F(NetworkTest, TunnelFollowsSupervisedWifiWithoutTakingAvailabilityCallback) {
+    struct Clock : neondoll::Clock {
+        uint64_t now=0;
+        int init() override{return 0;}int deinit() override{return 0;}
+        uint64_t now_ms() override{return now;}
+    } clock;
+    struct Backend : neondoll::WireGuardBackend {
+        int starts=0,stops=0,live=0;
+        int start(const neondoll::WireGuardConfig&) override{++starts;++live;return 0;}
+        int stop() override{++stops;live=0;return 0;}
+        State status() const override{return live?State::starting:State::down;}
+    } backend;
+    neondoll::NetworkSupervisor recovery{network,clock,{10,40,100}};
+    neondoll::WireGuardTransport tunnel{network,backend};
+    neondoll::WireGuardConfig config;
+    config.private_key.fill(1);config.peer_public_key.fill(2);
+    config.endpoint.address[0]=192;config.endpoint.address[2]=2;
+    config.endpoint.address[3]=1;config.endpoint.port=51820;
+    config.address_count=config.allowed_ip_count=1;
+    config.addresses[0].address[0]=0xfd;config.addresses[0].address[15]=2;
+    config.allowed_ips[0].address[0]=0xfd;config.allowed_ips[0].length=64;
+    ASSERT_EQ(network.init(),0);ASSERT_EQ(network.set_callback(changed,this),0);
+    ASSERT_EQ(network.start("ssid","p",0),0);ASSERT_EQ(recovery.start(),0);
+    ASSERT_EQ(tunnel.init(config),0);ASSERT_EQ(tunnel.start(),0);
+    ASSERT_EQ(recovery.poll(),0);ASSERT_EQ(tunnel.poll(),0);EXPECT_EQ(backend.starts,0);
+    got_ip(1);ASSERT_EQ(recovery.poll(),0);ASSERT_EQ(tunnel.poll(),0);
+    EXPECT_EQ(backend.starts,1);EXPECT_EQ(backend.live,1);
+    emit(WIFI_EVENT,WIFI_EVENT_STA_DISCONNECTED);
+    EXPECT_EQ(recovery.poll(),-3);ASSERT_EQ(tunnel.poll(),0);EXPECT_EQ(backend.live,0);
+    clock.now=10;ASSERT_EQ(recovery.poll(),0);got_ip(2);
+    ASSERT_EQ(recovery.poll(),0);ASSERT_EQ(tunnel.poll(),0);EXPECT_EQ(backend.starts,2);
+    got_ip(3);ASSERT_EQ(recovery.poll(),0);ASSERT_EQ(tunnel.poll(),0);
+    EXPECT_EQ(backend.live,0);ASSERT_EQ(tunnel.poll(),0);EXPECT_EQ(backend.starts,3);
+    EXPECT_EQ(changes,(std::vector<bool>{false,true,false,true,true}));
+    EXPECT_EQ(kinds.back(),Network::Change::changed);
+    ASSERT_EQ(tunnel.stop(),0);ASSERT_EQ(recovery.stop(),0);
+    ASSERT_EQ(recovery.poll(),0);ASSERT_EQ(tunnel.poll(),0);EXPECT_EQ(backend.live,0);
+    ASSERT_EQ(network.start("ssid","p",0),0);ASSERT_EQ(recovery.start(),0);
+    ASSERT_EQ(recovery.poll(),0);got_ip(4);ASSERT_EQ(recovery.poll(),0);
+    ASSERT_EQ(tunnel.poll(),0);EXPECT_EQ(backend.starts,3); // Explicit tunnel stop wins.
 }

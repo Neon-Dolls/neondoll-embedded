@@ -15,3 +15,6 @@ Wi-Fi lifecycle usage, callback ownership and AP-toggle validation:
 
 Recovery policy, intentional pause/shutdown and clock behavior:
 [M2.2 acceptance](docs/M2_2_ACCEPTANCE.md).
+
+WireGuard transport configuration/lifecycle foundation and deferred backend gate:
+[M3.1 acceptance](docs/M3_1_ACCEPTANCE.md). No encrypted connectivity is claimed.

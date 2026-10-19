@@ -3,6 +3,7 @@
 #include <array>
 #include <vector>
 #include <cstring>
+#include <limits>
 #include <arpa/inet.h>
 namespace {
 std::vector<uint8_t> packet(size_t payload=8,const char *source="fd00::1",const char *destination="fd00::2") {
@@ -25,7 +26,8 @@ TEST_F(Packets, TransmitReadsChainedPbufHeader) {
     auto p=packet();EXPECT_EQ(nd_transmit(p.data(),p.size(),1),0);EXPECT_TRUE(nd_outer_ipv4());
 }
 TEST_F(Packets, TransmitRejectsOversizeBeforeEncryptedBufferAllocation) {
-    auto p=packet(1381);EXPECT_NE(nd_transmit(p.data(),p.size(),0),0);
+    auto p=packet(1380);EXPECT_EQ(nd_transmit(p.data(),p.size(),0),0); // 1420-byte MTU.
+    p=packet(1381);EXPECT_NE(nd_transmit(p.data(),p.size(),0),0);
 }
 TEST_F(Packets, TransmitRejectsUnallowedDestination) {
     auto p=packet(8,"fd00::1","fd01::1");EXPECT_NE(nd_transmit(p.data(),p.size(),0),0);
@@ -61,6 +63,27 @@ TEST_F(Packets, EmptyPayloadIsValidButJumbogramsAreUnsupported) {
     auto p=packet(0);EXPECT_TRUE(nd_receive(p.data(),p.size(),0,0));
     EXPECT_EQ(nd_transmit(p.data(),p.size(),0),0);
     p[6]=0;EXPECT_FALSE(nd_receive(p.data(),p.size(),0,0));EXPECT_NE(nd_transmit(p.data(),p.size(),0),0);
+}
+TEST(Ipv6Length, PayloadLimitExcludesFortyByteBaseHeader) {
+    for(size_t payload:{size_t{65535-40},size_t{65535-39},size_t{65535}}) {
+        auto p=packet(payload);
+        EXPECT_EQ(nd_validate_ip6_length(p.data(),p.size(),0),40+payload);
+        EXPECT_EQ(nd_validate_ip6_length(p.data(),p.size(),1),40+payload);
+    }
+}
+TEST(Ipv6Length, MaximumPayloadStillRequiresCompletePacket) {
+    auto p=packet(65535);
+    for(size_t bytes:{size_t{39},size_t{40},size_t{65535},p.size()-1}) {
+        EXPECT_EQ(nd_validate_ip6_length(p.data(),bytes,0),0u);
+        EXPECT_EQ(nd_validate_ip6_length(p.data(),bytes,1),0u);
+    }
+}
+TEST(Ipv6Length, MaximumPayloadDoesNotRelaxPaddingOrBufferBounds) {
+    auto p=packet(65535);const size_t length=p.size();p.resize(length+16);
+    EXPECT_EQ(nd_validate_ip6_length(p.data(),length+15,1),length);
+    EXPECT_EQ(nd_validate_ip6_length(p.data(),length+15,0),0u);
+    EXPECT_EQ(nd_validate_ip6_length(p.data(),length+16,1),0u);
+    EXPECT_EQ(nd_validate_ip6_length(p.data(),std::numeric_limits<size_t>::max(),1),0u);
 }
 TEST_F(Packets, NonByteAlignedPrefixMatchesEveryBoundaryBit) {
     for(int bits=1;bits<=128;++bits) {

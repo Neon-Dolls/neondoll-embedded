@@ -368,7 +368,7 @@
  							netif->mtu = WIREGUARDIF_MTU;
 --- /dev/null
 +++ b/src/neondoll_ip6.h
-@@ -0,0 +1,38 @@
+@@ -0,0 +1,40 @@
 +// Copyright 2026 Neon-Dolls/neondoll-embedded
 +// SPDX-License-Identifier: BSD-3-Clause
 +#ifndef NEONDOLL_IP6_H
@@ -403,7 +403,9 @@
 +    size_t payload = ((size_t)header[4] << 8) | header[5];
 +    size_t length = 40 + payload;
 +    if (!payload && header[6] == 0) return 0; // Jumbo option unsupported.
-+    if (length > 65535 || length > bytes || bytes - length > (padded ? 15u : 0u)) return 0;
++    // The 16-bit limit applies to payload, excluding the 40-byte base header.
++    // Callers separately enforce their pbuf capacity and tunnel MTU.
++    if (length > bytes || bytes - length > (padded ? 15u : 0u)) return 0;
 +    return length;
 +}
 +#endif

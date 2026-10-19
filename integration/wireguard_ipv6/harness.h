@@ -16,6 +16,7 @@ int nd_default_unchanged(void);
 int nd_address_correct(const char *address);
 int nd_output_registered(void);
 int nd_add_allowed(const char *prefix, const char *mask);
+size_t nd_validate_ip6_length(const uint8_t *header, size_t bytes, int padded);
 #ifdef __cplusplus
 }
 #endif

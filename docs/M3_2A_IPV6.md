@@ -66,6 +66,9 @@ On receive, authenticated plaintext must have a complete version-6, 40-byte base
 header. Total length is `40 + payload_length`; overflow, truncation, excess
 padding and unsupported jumbograms are rejected. Up to 15 bytes of WireGuard
 padding are removed before delivery. A declared empty payload is supported;
+the maximum non-jumbo payload is 65,535 bytes, plus the 40-byte base header.
+The helper validates that protocol length separately from the caller's lwIP
+16-bit buffer capacity and tunnel MTU; those transport limits still apply.
 IPv6 extension/transport header semantics remain the responsibility of lwIP's
 IP input path, not a new protocol stack here. Peer AllowedIPs match the inner
 **source**, not its destination. Shared IPv4 receive handling also checks source
@@ -95,7 +98,7 @@ UDP/netif/clock/RNG delivery is simulated. Tests use synthetic session keys rath
 than a handshake. The tiny sodium test header declares the real library ABI; it
 is not a crypto stub. No test key is included in the production firmware.
 
-Local results: **133 tests passed** (116 existing + 17 packet tests). Cases cover
+Local results: **136 tests passed** (116 existing + 20 packet/header tests). Cases cover
 actual interface setup, chained transmit buffers, IPv4 endpoint selection,
 AEAD receive and ciphertext loopback, tampered authentication/replay, source vs
 destination filtering, every prefix length `/1` through `/128`, invalid masks,

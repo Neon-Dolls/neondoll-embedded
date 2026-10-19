@@ -128,3 +128,8 @@ int nd_receive_wire(void) {
     wireguardif_network_rx(device,device->udp_pcb,p,&device->peers[0].ip,51820);
     return delivered_length!=0;
 }
+
+// Test the protocol-length helper independently of lwIP's 16-bit pbuf/MTU limits.
+size_t nd_validate_ip6_length(const uint8_t *header,size_t bytes,int padded) {
+    return nd_ip6_length(header,bytes,padded!=0);
+}

@@ -174,6 +174,7 @@ int Esp32NetworkAvailability::connect() {
 }
 void Esp32NetworkAvailability::transition(bool available, uint32_t address) {
     if (available_ == available && address_ == address) return;
+    if (available) ++availability_epoch_;
     change_ = available ? (available_ ? Change::changed : Change::available) : Change::offline;
     available_ = available; address_ = address; pending_ = true;
 }

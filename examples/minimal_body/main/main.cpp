@@ -11,6 +11,9 @@ static neondoll::Esp32Clock app_clock;
 static neondoll::Esp32NetworkAvailability app_network;
 static neondoll::Esp32Logger app_logger;
 static neondoll::PlatformContext ctx;
+#ifdef CONFIG_NEONDOLL_WIFI_ENABLE
+static neondoll::NetworkSupervisor app_recovery{app_network, app_clock};
+#endif
 
 extern "C" void app_main(void) {
     // Bootstrap entropy must run before application Wi-Fi/ADC/I2S startup.
@@ -35,15 +38,15 @@ extern "C" void app_main(void) {
             "network_changed" : "network_available";
         std::printf("NeonDoll network: %s\n", state);
     }, nullptr);
-    int network_result = app_network.start(CONFIG_NEONDOLL_WIFI_SSID, CONFIG_NEONDOLL_WIFI_PASSWORD);
-    if (network_result == 0) network_result = app_network.connect();
+    int network_result = app_network.start(CONFIG_NEONDOLL_WIFI_SSID, CONFIG_NEONDOLL_WIFI_PASSWORD, 0);
+    if (network_result == 0) network_result = app_recovery.start();
     if (network_result != 0) {
         std::printf("Wi-Fi startup failed: status %d, IDF error %d\n", network_result, app_network.last_error());
         app_network.stop();
         return;
     }
     while (true) {
-        app_network.poll();
+        app_recovery.poll();
         vTaskDelay(pdMS_TO_TICKS(100));
     }
 #endif

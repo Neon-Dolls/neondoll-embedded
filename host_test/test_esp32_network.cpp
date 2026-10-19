@@ -313,3 +313,99 @@ TEST_F(NetworkTest, StopAndFailedShutdownRecoverForNextOwnerWithoutLeaks) {
     EXPECT_EQ(state().queues,0);EXPECT_EQ(state().interfaces,0);
     EXPECT_TRUE(state().handlers.empty());EXPECT_FALSE(state().wifi);
 }
+
+TEST_F(NetworkTest, SupervisorRecoveryPreservesCallbackSemanticsAndResources) {
+    struct Clock : neondoll::Clock {
+        uint64_t now=0;
+        int init() override{return 0;}int deinit() override{return 0;}
+        uint64_t now_ms() override{return now;}
+    } clock;
+    neondoll::NetworkSupervisor recovery{network,clock,{10,40,100}};
+    ASSERT_EQ(network.init(),0);ASSERT_EQ(network.set_callback(changed,this),0);
+    ASSERT_EQ(network.start("ssid","p",0),0);ASSERT_EQ(recovery.start(),0);
+    ASSERT_EQ(recovery.poll(),0);EXPECT_EQ(changes,std::vector<bool>{false});
+    got_ip(1);ASSERT_EQ(recovery.poll(),0);
+    for(int i=0;i<100;++i) {
+        emit(WIFI_EVENT,WIFI_EVENT_STA_DISCONNECTED);
+        EXPECT_EQ(recovery.poll(),-3);EXPECT_FALSE(network.available());
+        const int attempts=state().connect_calls;
+        clock.now+=9;ASSERT_EQ(recovery.poll(),0);EXPECT_EQ(state().connect_calls,attempts);
+        ++clock.now;ASSERT_EQ(recovery.poll(),0);EXPECT_EQ(state().connect_calls,attempts+1);
+        got_ip(2);ASSERT_EQ(recovery.poll(),0);
+        EXPECT_TRUE(network.available());EXPECT_EQ(recovery.failures(),0u);
+        EXPECT_EQ(state().handlers.size(),2u);EXPECT_EQ(state().interfaces,1);EXPECT_EQ(state().queues,1);
+    }
+    got_ip(3);ASSERT_EQ(recovery.poll(),0);
+    EXPECT_EQ(kinds.back(),Network::Change::changed);
+    EXPECT_EQ(changes.size(),203u); // Initial + first IP + 100 offline/online pairs + IP change.
+    const auto stale=state().handlers;const int attempts=state().connect_calls;
+    ASSERT_EQ(recovery.stop(),0);
+    for(const auto& handler:stale)handler.callback(handler.arg,WIFI_EVENT,WIFI_EVENT_STA_DISCONNECTED,nullptr);
+    clock.now+=100000;ASSERT_EQ(recovery.poll(),0);
+    EXPECT_FALSE(network.available());EXPECT_EQ(changes.back(),false);
+    EXPECT_EQ(state().connect_calls,attempts);EXPECT_TRUE(state().handlers.empty());
+    EXPECT_EQ(state().interfaces,0);EXPECT_EQ(recovery.request_recovery(),-1);
+}
+
+TEST_F(NetworkTest, SupervisorHandlesNativeRetryExhaustionAndIntentionalPause) {
+    struct Clock : neondoll::Clock {
+        uint64_t now=0;
+        int init() override{return 0;}int deinit() override{return 0;}
+        uint64_t now_ms() override{return now;}
+    } clock;
+    neondoll::NetworkSupervisor recovery{network,clock,{10,40,100}};
+    ASSERT_EQ(network.init(),0);ASSERT_EQ(network.start("ssid","p",2),0);
+    ASSERT_EQ(recovery.start(),0);ASSERT_EQ(recovery.poll(),0);
+    for(int i=0;i<3;++i)emit(WIFI_EVENT,WIFI_EVENT_STA_DISCONNECTED);
+    EXPECT_EQ(recovery.poll(),-3);EXPECT_EQ(state().connect_calls,3);
+    clock.now=10;ASSERT_EQ(recovery.poll(),0);EXPECT_EQ(state().connect_calls,4);
+    got_ip(1);ASSERT_EQ(recovery.poll(),0);
+    ASSERT_EQ(recovery.disconnect(),0);emit(WIFI_EVENT,WIFI_EVENT_STA_DISCONNECTED);
+    clock.now=100000;ASSERT_EQ(recovery.poll(),0);
+    EXPECT_EQ(state().connect_calls,4);EXPECT_FALSE(network.available());
+    ASSERT_EQ(recovery.request_recovery(),0);ASSERT_EQ(recovery.poll(),0);
+    EXPECT_EQ(state().connect_calls,5);got_ip(2);ASSERT_EQ(recovery.poll(),0);
+    emit(WIFI_EVENT,WIFI_EVENT_STA_STOP);EXPECT_EQ(recovery.poll(),-1);
+    EXPECT_EQ(recovery.state(),neondoll::NetworkSupervisor::State::stopped);
+    EXPECT_EQ(recovery.request_recovery(),-1);
+    ASSERT_EQ(network.start("ssid","p",0),0);ASSERT_EQ(recovery.start(),0);
+    ASSERT_EQ(recovery.poll(),0);got_ip(3);ASSERT_EQ(recovery.poll(),0);
+    EXPECT_TRUE(network.available());
+}
+
+TEST_F(NetworkTest, SupervisorCallbacksCannotReenterRecoveryLifecycle) {
+    struct Clock : neondoll::Clock {
+        int init() override{return 0;}int deinit() override{return 0;}
+        uint64_t now_ms() override{return 0;}
+    } clock;
+    neondoll::NetworkSupervisor recovery{network,clock};
+    ASSERT_EQ(network.init(),0);ASSERT_EQ(network.start("ssid","p",0),0);
+    ASSERT_EQ(network.set_callback([](void* arg,bool){
+        auto& supervisor=*static_cast<neondoll::NetworkSupervisor*>(arg);
+        EXPECT_EQ(supervisor.poll(),-2);EXPECT_EQ(supervisor.stop(),-2);
+        EXPECT_EQ(supervisor.disconnect(),-2);EXPECT_EQ(supervisor.start(),-2);
+        EXPECT_EQ(supervisor.request_recovery(),-2);
+    },&recovery),0);
+    ASSERT_EQ(recovery.start(),0);ASSERT_EQ(recovery.poll(),0);
+    got_ip(1);ASSERT_EQ(recovery.poll(),0);
+    EXPECT_EQ(recovery.state(),neondoll::NetworkSupervisor::State::online);
+    EXPECT_EQ(network.set_callback(nullptr,nullptr),0);
+}
+
+TEST_F(NetworkTest, SupervisorSeesTransientIpAcquisitionWithoutReplacingCallbacks) {
+    struct Clock : neondoll::Clock {
+        uint64_t now=0;
+        int init() override{return 0;}int deinit() override{return 0;}
+        uint64_t now_ms() override{return now;}
+    } clock;
+    neondoll::NetworkSupervisor recovery{network,clock,{10,40,100}};
+    ASSERT_EQ(network.init(),0);ASSERT_EQ(network.set_callback(changed,this),0);
+    ASSERT_EQ(network.start("ssid","p",0),0);ASSERT_EQ(recovery.start(),0);
+    state().fail="connect";EXPECT_EQ(recovery.poll(),-3);
+    clock.now=10;EXPECT_EQ(recovery.poll(),-3);EXPECT_EQ(recovery.retry_delay_ms(),20u);
+    state().fail.clear();ASSERT_EQ(recovery.request_recovery(),0);ASSERT_EQ(recovery.poll(),0);
+    got_ip(1);emit(WIFI_EVENT,WIFI_EVENT_STA_DISCONNECTED);
+    EXPECT_EQ(recovery.poll(),-3);EXPECT_EQ(recovery.retry_delay_ms(),10u);
+    EXPECT_EQ(recovery.failures(),1u);
+    EXPECT_EQ(changes,(std::vector<bool>{false,true,false}));
+}

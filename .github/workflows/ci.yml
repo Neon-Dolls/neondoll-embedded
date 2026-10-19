@@ -9,8 +9,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: sudo apt-get update && sudo apt-get install -y libgtest-dev cmake ninja-build
-      - run: cmake -S . -B build/host -G Ninja
+      - run: sudo apt-get update && sudo apt-get install -y libgtest-dev libsodium-dev cmake ninja-build
+      - name: Prepare pinned WireGuard patch and host lwIP
+        run: |
+          curl -fL https://codeload.github.com/esphome-libs/wireguard/tar.gz/9b7660fed27151abdcbf32b43861044cf4a32497 -o /tmp/wireguard.tar.gz
+          python3 patches/esp_wireguard/prepare.py /tmp/wireguard.tar.gz /tmp/wireguard
+          curl -fL https://codeload.github.com/lwip-tcpip/lwip/tar.gz/refs/tags/STABLE-2_1_3_RELEASE -o /tmp/lwip.tar.gz
+          echo '6add930f7c0c7a8adbe3fef393ecf47ce32ed8dadd00d23042ff61db05b194ef  /tmp/lwip.tar.gz' | sha256sum -c -
+          mkdir /tmp/lwip
+          tar -xzf /tmp/lwip.tar.gz -C /tmp/lwip --strip-components=1
+      - run: cmake -S . -B build/host -G Ninja -DWIREGUARD_SOURCE_DIR=/tmp/wireguard -DLWIP_SOURCE_DIR=/tmp/lwip
       - run: cmake --build build/host
       - run: ctest --test-dir build/host --output-on-failure
   esp32:
@@ -31,6 +39,15 @@ jobs:
           idf.py -C examples/minimal_body -B "$PWD/examples/minimal_body/build/wifi" \
             -D SDKCONFIG="$PWD/examples/minimal_body/build/sdkconfig.wifi" \
             -D SDKCONFIG_DEFAULTS="$PWD/examples/minimal_body/sdkconfig.wifi-ci.defaults" build
+      - name: Build patched IPv6 WireGuard compile probe
+        shell: bash
+        run: |
+          . /opt/esp/idf/export.sh
+          curl -fL https://codeload.github.com/esphome-libs/wireguard/tar.gz/9b7660fed27151abdcbf32b43861044cf4a32497 -o /tmp/wireguard.tar.gz
+          python patches/esp_wireguard/prepare.py /tmp/wireguard.tar.gz /tmp/wireguard
+          mkdir /tmp/wg-ipv6-probe
+          cp -a integration/wireguard_ipv6/esp32/. /tmp/wg-ipv6-probe/
+          idf.py -C /tmp/wg-ipv6-probe -B /tmp/wg-ipv6-build -D WIREGUARD_SOURCE_DIR=/tmp/wireguard build
       - uses: actions/upload-artifact@v4
         with:
           name: minimal-body-esp32

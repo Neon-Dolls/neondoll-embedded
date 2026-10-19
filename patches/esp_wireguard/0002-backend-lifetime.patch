@@ -1,0 +1,165 @@
+--- a/src/wireguardif.c
++++ b/src/wireguardif.c
+@@ -108,15 +108,25 @@
+ 	return ((peer->last_initiation_tx == 0) || (wireguard_expired(peer->last_initiation_tx, REKEY_TIMEOUT)));
+ }
+ 
++// A Wi-Fi netif can disappear before the owner task drains its offline event.
++// Resolve the bound index before dereferencing a cached underlay pointer.
++static struct netif *wireguardif_live_underlay(struct wireguard_device *device) {
++    struct netif *current = netif_get_by_index(device->udp_pcb->netif_idx);
++    return current && current == device->underlying_netif && netif_is_up(current) &&
++        netif_is_link_up(current) ? current : NULL;
++}
++
+ static err_t wireguardif_peer_output(struct netif *netif, struct pbuf *q, struct wireguard_peer *peer) {
+ 	struct wireguard_device *device = (struct wireguard_device *)netif->state;
+ 	// Send to last know port, not the connect port
+ 	//TODO: Support DSCP and ECN - lwip requires this set on PCB globally, not per packet
+-	return udp_sendto_if(device->udp_pcb, q, &peer->ip, peer->port, device->underlying_netif);
++	struct netif *underlay = wireguardif_live_underlay(device);
++    return underlay ? udp_sendto_if(device->udp_pcb, q, &peer->ip, peer->port, underlay) : ERR_IF;
+ }
+ 
+ static err_t wireguardif_device_output(struct wireguard_device *device, struct pbuf *q, const ip_addr_t *ipaddr, u16_t port) {
+-	return udp_sendto_if(device->udp_pcb, q, ipaddr, port, device->underlying_netif);
++	struct netif *underlay = wireguardif_live_underlay(device);
++    return underlay ? udp_sendto_if(device->udp_pcb, q, ipaddr, port, underlay) : ERR_IF;
+ }
+ 
+ static err_t wireguardif_output_to_peer(struct netif *netif, struct pbuf *q, const ip_addr_t *ipaddr, struct wireguard_peer *peer) {
+@@ -1000,11 +1010,15 @@
+ 	struct wireguardif_init_data *init_data;
+ 	struct wireguard_device *device;
+ 	struct udp_pcb *udp;
+-	uint8_t private_key[WIREGUARD_PRIVATE_KEY_LEN];
++	uint8_t private_key[WIREGUARD_PRIVATE_KEY_LEN] = {0};
+ 	size_t private_key_len = sizeof(private_key);
+ 
+ 	struct netif* underlying_netif = NULL;
+ 
++    // Explicit binding avoids ESP-NETIF IPC while the caller owns the core lock.
++    if (netif && netif->state && ((struct wireguardif_init_data *)netif->state)->bind_netif) {
++        underlying_netif = ((struct wireguardif_init_data *)netif->state)->bind_netif;
++    } else {
+ #if (!defined(ESP8266) || defined(IDF_VER)) && !defined(LIBRETINY)
+ 	char lwip_netif_name[8] = {0,};
+ 
+@@ -1042,7 +1056,7 @@
+ 		goto fail;
+ 	}
+ #endif  // (!defined(ESP8266) || defined(IDF_VER)) && !defined(LIBRETINY)
+-
++    }
+ 	ESP_LOGV(TAG, "underlying_netif = %p", underlying_netif);
+ 
+ 	LWIP_ASSERT("netif != NULL", (netif != NULL));
+@@ -1104,6 +1118,7 @@
+ 
+ 							result = ERR_OK;
+ 						} else {
++							crypto_zero(device, sizeof(*device));
+ 							mem_free(device);
+ 							device = NULL;
+ 							udp_remove(udp);
+@@ -1127,6 +1142,8 @@
+ 		result = ERR_ARG;
+ 	}
+ fail:
++    crypto_zero(private_key, sizeof(private_key));
++    if (result != ERR_OK && netif) netif->state = NULL;
+ 	return result;
+ }
+ 
+@@ -1166,7 +1183,8 @@
+ 	struct wireguard_device *device = (struct wireguard_device *)netif->state;
+ 
+ 	// remove device context.
+-	free(device);
++	crypto_zero(device, sizeof(*device));
++	mem_free(device);
+ 	netif->state = NULL;
+ }
+ // vim: noexpandtab
+--- a/src/wireguard-platform.h
++++ b/src/wireguard-platform.h
+@@ -66,6 +66,8 @@
+ 
+ // Initialize crypto backend (return ESP_OK on success)
+ esp_err_t wireguard_platform_init();
++// Single-owner platform lifecycle; clears DRBG/entropy state after netif teardown.
++void wireguard_platform_deinit(void);
+ 
+ // The number of milliseconds since system boot - for LwIP systems this could be sys_now()
+ uint32_t wireguard_sys_now();
+--- a/src/wireguard-platform.c
++++ b/src/wireguard-platform.c
+@@ -87,13 +87,27 @@
+ }
+ #endif // MBEDTLS_VERSION_NUMBER < 0x04000000
+ 
++static bool platform_initialized = false;
++
++void wireguard_platform_deinit(void) {
++#if MBEDTLS_VERSION_NUMBER < 0x04000000
++    mbedtls_ctr_drbg_free(&random_context);
++    mbedtls_entropy_free(&entropy_context);
++    crypto_zero(&random_context, sizeof(random_context));
++    crypto_zero(&entropy_context, sizeof(entropy_context));
++#endif
++    platform_initialized = false;
++}
++
+ esp_err_t wireguard_platform_init() {
++    if (platform_initialized) return ESP_OK;
+ #if MBEDTLS_VERSION_NUMBER >= 0x04000000
+ 	psa_status_t status = psa_crypto_init();
+ 	if (status != PSA_SUCCESS) {
+ 		ESP_LOGE(TAG, "psa_crypto_init failed: %d", (int) status);
+ 		return ESP_FAIL;
+ 	}
++	platform_initialized = true;
+ 	return ESP_OK;
+ #else
+ 	int mbedtls_err;
+@@ -125,15 +139,17 @@
+ 	}
+ 	err = ESP_OK;
+ fail:
++    if (err == ESP_OK) platform_initialized = true;
++    else wireguard_platform_deinit();
+ 	return err;
+ #endif
+ }
+ 
+ void wireguard_random_bytes(void *bytes, size_t size) {
+ #if MBEDTLS_VERSION_NUMBER >= 0x04000000
+-	psa_generate_random((uint8_t *) bytes, size);
++	if (!platform_initialized || psa_generate_random((uint8_t *) bytes, size) != PSA_SUCCESS) abort();
+ #else
+-	mbedtls_ctr_drbg_random(&random_context, bytes, size);
++	if (!platform_initialized || mbedtls_ctr_drbg_random(&random_context, bytes, size) != 0) abort();
+ #endif
+ }
+ 
+--- a/idf_component.yml
++++ b/idf_component.yml
+@@ -4,7 +4,7 @@
+ repository: https://github.com/esphome-libs/wireguard.git
+ license: BSD-3-Clause
+ dependencies:
+-  esphome/libsodium: "^1.10021.1"
++  esphome/libsodium: "1.10021.1"
+ files:
+   exclude:
+     - ".github/**/*"
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -29,6 +29,7 @@
+   )
+ 
+   target_compile_options(${COMPONENT_LIB} PRIVATE ${WIREGUARD_COMPILE_OPTIONS})
++  target_compile_definitions(${COMPONENT_LIB} PUBLIC CONFIG_WIREGUARD_MAX_SRC_IPS=4)
+ else()
+   # Generic CMake build, for consumers that pull this repo in with
+   # add_subdirectory().

@@ -17,7 +17,19 @@ int nd_address_correct(const char *address);
 int nd_output_registered(void);
 int nd_add_allowed(const char *prefix, const char *mask);
 size_t nd_validate_ip6_length(const uint8_t *header, size_t bytes, int padded);
+void nd_backend_reset(void);
+void nd_backend_fault(const char *name);
+void nd_backend_clock(uint32_t now);
+void nd_backend_peer_keys(void);
+int nd_backend_authenticate(int tamper);
+int nd_backend_resources(void);
+int nd_backend_zeroizations(void);
+int nd_backend_decoded_wipes(void);
+void nd_backend_underlay(int present);
+int nd_backend_tick(void);
+int nd_backend_configured(void);
 #ifdef __cplusplus
 }
 #endif
+
 #endif

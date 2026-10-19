@@ -8,7 +8,7 @@ import tarfile
 
 REVISION = "9b7660fed27151abdcbf32b43861044cf4a32497"
 ARCHIVE_SHA256 = "1c0839424dd01c7a89e51242f1377c0b7b683338c40303c0cb93f06815d3bc6a"
-ALLOWED = {"include/esp_wireguard.h", "src/esp_wireguard.c", "src/wireguardif.c", "src/neondoll_ip6.h"}
+ALLOWED = {"include/esp_wireguard.h", "src/esp_wireguard.c", "src/wireguardif.c", "src/neondoll_ip6.h", "src/wireguard-platform.c", "src/wireguard-platform.h", "idf_component.yml", "CMakeLists.txt"}
 
 
 def main():
@@ -53,7 +53,7 @@ def main():
             changed.add(name)
     if changed != ALLOWED:
         parser.error(f"unexpected patch delta: {sorted(changed)}; crypto sources must remain unchanged")
-    print(f"Prepared {REVISION} + NeonDoll IPv6 patch; only {sorted(changed)} changed.")
+    print(f"Prepared {REVISION} + NeonDoll patch series; only {sorted(changed)} changed.")
 
 
 if __name__ == "__main__":

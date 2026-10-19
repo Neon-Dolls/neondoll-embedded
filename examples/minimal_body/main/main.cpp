@@ -11,6 +11,13 @@ static neondoll::Esp32Clock app_clock;
 static neondoll::Esp32NetworkAvailability app_network;
 static neondoll::Esp32Logger app_logger;
 static neondoll::PlatformContext ctx;
+#ifdef NEONDOLL_HAS_WIREGUARD
+#include <neondoll/esp32_wireguard.hpp>
+static neondoll::Esp32WireGuardBackend app_wg_backend;
+static neondoll::WireGuardTransport app_tunnel{app_network, app_wg_backend};
+// Application supplies RAM-only WireGuardConfig after identity, Wi-Fi and time
+// setup. No example keys or automatic provisioning are included here.
+#endif
 #ifdef CONFIG_NEONDOLL_WIFI_ENABLE
 static neondoll::NetworkSupervisor app_recovery{app_network, app_clock};
 #endif
@@ -47,6 +54,9 @@ extern "C" void app_main(void) {
     }
     while (true) {
         app_recovery.poll();
+#ifdef NEONDOLL_HAS_WIREGUARD
+        app_tunnel.poll();
+#endif
         vTaskDelay(pdMS_TO_TICKS(100));
     }
 #endif

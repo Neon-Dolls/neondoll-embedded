@@ -230,8 +230,10 @@ ip -j -6 route show table all > "$LAB/routes6.after.json"
 
 ## Executed evidence
 
-- Local hardware discovery: no `/dev/ttyUSB*`, `/dev/ttyACM*`, serial-by-id or USB
-  bus device exposed; no remote hardware supplied. Physical flash/run: **not run**.
+- Hardware discovery included a host check outside the filesystem sandbox:
+  no `/dev/ttyUSB*`, `/dev/ttyACM*` or serial-by-id node was present. The host USB
+  inventory contained no identified ESP32 or serial/debug adapter; no remote board
+  was supplied. Physical flash/run: **not run**.
 - Real Linux/ESP handshake, encrypted IPv6 exchange, RF recovery, rekey and device
   heap/stack/resource measurements: **not run**, all pending the checklist above.
 - All ten host CTest suites passed: 159 C++ tests plus nine Python tests (168

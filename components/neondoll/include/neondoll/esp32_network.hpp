@@ -3,6 +3,7 @@
 #ifndef NEONDOLL_ESP32_NETWORK_HPP
 #define NEONDOLL_ESP32_NETWORK_HPP
 #include <neondoll/platform.hpp>
+#include <neondoll/network_supervisor.hpp>
 
 namespace neondoll {
 /** Single owned ESP32 station. Serialize all public methods/destruction on one
@@ -11,7 +12,7 @@ namespace neondoll {
  * adapter. IDF's event task never calls application code or retains this object.
  * init() does not initialize/start Wi-Fi: call start() after M1 identity init.
  */
-class Esp32NetworkAvailability : public NetworkAvailability {
+class Esp32NetworkAvailability : public NetworkAvailability, public NetworkConnection {
 public:
     enum class Change { offline, available, changed };
     Esp32NetworkAvailability() = default;
@@ -24,13 +25,16 @@ public:
     // Credentials and retry policy belong to the application. Stored in RAM only.
     // start() starts STA without connecting; connect() requests association.
     int start(const char* ssid, const char* password, uint8_t reconnect_limit = 3);
-    int connect();
-    int disconnect();
-    int stop();
+    int connect() override;
+    int disconnect() override;
+    int stop() override;
     // Bounded drain (16 events). Overflow disconnects and fails closed; the
     // application must explicitly connect() again. Returns -4 on overflow.
-    int poll();
-    bool available() const { return available_; }
+    int poll() override;
+    bool available() const override { return available_; }
+    bool running() const override { return started_; }
+    bool connection_requested() const override { return desired_; }
+    uint64_t availability_epoch() const override { return availability_epoch_; }
     uint32_t ipv4_address() const { return address_; } // network byte order
     Change last_change() const { return change_; }
     int last_error() const { return error_; } // ESP-IDF error, 0 when recovered
@@ -43,6 +47,7 @@ private:
     uint8_t retries_ = 0, retry_limit_ = 3;
     uintptr_t epoch_ = 0;
     uint32_t address_ = 0;
+    uint64_t availability_epoch_ = 0;
     int error_ = 0;
     Change change_ = Change::offline;
     Callback callback_ = nullptr;

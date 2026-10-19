@@ -1,0 +1,20 @@
+#ifndef ND_LWIPOPTS_H
+#define ND_LWIPOPTS_H
+#define NO_SYS 1
+#define SYS_LIGHTWEIGHT_PROT 0
+#define LWIP_IPV4 1
+#define LWIP_IPV6 1
+#define LWIP_IPV6_ADDRESS_LIFETIMES 1
+#define LWIP_IPV6_AUTOCONFIG 1
+#define LWIP_IPV6_MLD 0
+#define LWIP_IGMP 0
+#define LWIP_TCP 0
+#define LWIP_DNS 1
+#define LWIP_SOCKET 0
+#define LWIP_NETCONN 0
+#define LWIP_STATS 0
+#define MEM_LIBC_MALLOC 1
+#define MEMP_MEM_MALLOC 1
+#define MEM_ALIGNMENT 8
+#define LWIP_CHECKSUM_CTRL_PER_NETIF 0
+#endif

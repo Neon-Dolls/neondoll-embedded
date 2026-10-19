@@ -1,0 +1,7 @@
+cmake_minimum_required(VERSION 3.16)
+if(NOT WIREGUARD_SOURCE_DIR OR NOT EXISTS "${WIREGUARD_SOURCE_DIR}/idf_component.yml")
+    message(FATAL_ERROR "Set WIREGUARD_SOURCE_DIR to the audited upstream checkout (directory named wireguard)")
+endif()
+set(EXTRA_COMPONENT_DIRS "${WIREGUARD_SOURCE_DIR}")
+include($ENV{IDF_PATH}/tools/cmake/project.cmake)
+project(wireguard_feasibility)

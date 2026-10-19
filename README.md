@@ -18,3 +18,6 @@ Recovery policy, intentional pause/shutdown and clock behavior:
 
 WireGuard transport configuration/lifecycle foundation and deferred backend gate:
 [M3.1 acceptance](docs/M3_1_ACCEPTANCE.md). No encrypted connectivity is claimed.
+
+Pinned ESPHome backend evaluation and unresolved IPv6 blockers:
+[M3.2 feasibility](docs/M3_2_FEASIBILITY.md). M3.2 remains incomplete.

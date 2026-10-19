@@ -30,3 +30,6 @@ __pycache__
 # OS generated files
 .DS_Store
 Thumbs.db
+
+# Interoperability credentials belong outside the checkout.
+integration/wireguard_interop/*.local.json

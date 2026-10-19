@@ -144,3 +144,5 @@ Before completion, demonstrate a real handshake, bidirectional IPv6 packets
 against Linux/Core over Wi-Fi with IPv4 UDP, route isolation, repeated outage/
 restart cleanup and heap/stack/netif/socket stability. No Relay, provisioning or
 pairing is added.
+
+M3.2b extends the prepared patch series with platform/lifetime/build hardening; see [M3.2b](M3_2B_ACCEPTANCE.md). The M3.2a evidence above does not claim physical interoperability.

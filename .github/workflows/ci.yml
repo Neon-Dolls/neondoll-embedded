@@ -48,6 +48,14 @@ jobs:
           mkdir /tmp/wg-ipv6-probe
           cp -a integration/wireguard_ipv6/esp32/. /tmp/wg-ipv6-probe/
           idf.py -C /tmp/wg-ipv6-probe -B /tmp/wg-ipv6-build -D WIREGUARD_SOURCE_DIR=/tmp/wireguard build
+      - name: Build production WireGuard backend
+        shell: bash
+        run: |
+          . /opt/esp/idf/export.sh
+          idf.py -C examples/minimal_body -B /tmp/wg-backend-build \
+            -D SDKCONFIG=/tmp/wg-backend-build/sdkconfig \
+            -D "SDKCONFIG_DEFAULTS=$PWD/examples/minimal_body/sdkconfig.wifi-ci.defaults;$PWD/examples/minimal_body/sdkconfig.wireguard.defaults" \
+            -D WIREGUARD_SOURCE_DIR=/tmp/wireguard build
       - uses: actions/upload-artifact@v4
         with:
           name: minimal-body-esp32

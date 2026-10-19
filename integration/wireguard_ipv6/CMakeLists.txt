@@ -8,6 +8,7 @@ if(NOT SODIUM_LIBRARY)
 endif()
 add_library(wg_packet_host STATIC
     harness.c
+    ${PROJECT_SOURCE_DIR}/components/neondoll/src/esp32_wireguard.cpp
     ${WIREGUARD_SOURCE_DIR}/src/wireguard.c
     ${WIREGUARD_SOURCE_DIR}/src/crypto.c
     ${WIREGUARD_SOURCE_DIR}/src/crypto/refc/blake2s.c
@@ -25,8 +26,17 @@ target_include_directories(wg_packet_host PUBLIC stubs ${WIREGUARD_SOURCE_DIR}/s
     ${WIREGUARD_SOURCE_DIR}/include ${LWIP_SOURCE_DIR}/src/include)
 target_compile_definitions(wg_packet_host PRIVATE CONFIG_LWIP_IPV6=1 CONFIG_WIREGUARD_MAX_SRC_IPS=4)
 target_compile_options(wg_packet_host PRIVATE -ffunction-sections -fdata-sections -Wno-unused-result)
-target_link_libraries(wg_packet_host PUBLIC ${SODIUM_LIBRARY})
+target_link_libraries(wg_packet_host PUBLIC ${SODIUM_LIBRARY} neondoll)
+add_executable(wg_backend_tests test_backend.cpp)
+target_link_libraries(wg_backend_tests PRIVATE wg_packet_host GTest::gtest_main)
+target_link_options(wg_backend_tests PRIVATE -Wl,--gc-sections)
+add_test(NAME esp32_wireguard_backend COMMAND wg_backend_tests)
 add_executable(wg_ipv6_tests test_packets.cpp)
 target_link_libraries(wg_ipv6_tests PRIVATE wg_packet_host GTest::gtest_main)
 target_link_options(wg_ipv6_tests PRIVATE -Wl,--gc-sections)
 add_test(NAME patched_wireguard_ipv6 COMMAND wg_ipv6_tests)
+add_library(wg_platform_host STATIC platform_harness.c ${WIREGUARD_SOURCE_DIR}/src/crypto.c)
+target_include_directories(wg_platform_host PRIVATE stubs ${WIREGUARD_SOURCE_DIR}/src ${LWIP_SOURCE_DIR}/src/include)
+add_executable(wg_platform_tests test_platform.cpp)
+target_link_libraries(wg_platform_tests PRIVATE wg_platform_host GTest::gtest_main)
+add_test(NAME wireguard_platform_secrets COMMAND wg_platform_tests)

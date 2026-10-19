@@ -10,3 +10,5 @@ typedef int esp_err_t;
 #define ESP_ERR_NOT_FOUND 0x105
 const char *esp_err_to_name(int error);
 #endif
+#define ESP_ERR_HW_CRYPTO_BASE 0xc000
+#define ESP_ERR_INVALID_CRC 0x109

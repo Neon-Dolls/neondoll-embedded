@@ -29,11 +29,16 @@ The `tunnel` state codes are 0 uninitialized, 1 stopped, 2 waiting for network,
 3 starting, 4 up and 5 cleanup pending; `ready` is sampled independently from
 the authenticated backend. Nonzero command results are failures to investigate.
 
-The owner task polls M2 then M3, binds an IPv6 UDP socket to the assigned tunnel
-source on port 4242, and exchanges bounded patterned probes in both directions.
+The owner task polls M2 then M3, binds an IPv6 UDP socket explicitly to the
+WireGuard netif **and** assigned tunnel source on port 4242, and exchanges bounded
+patterned probes in both directions.
 Only the existing backend's authenticated state can report `ready=1`. Wi-Fi alone
 is insufficient. The app does not install routes or change the default netif.
-Read-only metrics include default, source-bound and unbound IPv6 route selection.
+Read-only metrics include default, source-hint and unbound IPv6 route selection.
+`source_route_peer_wg` (formerly `bound_peer_wg`) describes `ip6_route`, not the
+socket's enforced interface; it may be zero when an underlay RA shadows that hint.
+`probe_ifindex` is the requested interface index after successful socket-option
+setup, not kernel readback or evidence of physical transmission.
 `resource_sample_valid=0` means TCP/IP has not yet been initialized by a successful
 station start; zero netif/UDP fields at that stage are not cleanup evidence. Once
 initialized, sampling remains enabled after stop/shutdown so retained resources
@@ -44,6 +49,66 @@ addresses and one explicit ESP32 `/128` route. It never uses wg-quick, changes
 forwarding/firewall/sysctl policy, or installs a default route. Review the script
 before running it with sudo. Do not run it where these lab addresses/interface
 name or UDP port 51820 are already in use.
+
+## Exact socket routing mechanism and limits
+
+ESP-IDF 5.2.1's `components/lwip/lwip/src/core/ipv6/ip6.c:ip6_route` considers
+on-link and router-announced routes **before** its unscoped source-address fallback.
+Binding only the ULA source therefore does not force the WG netif. In the regression
+fixture, an underlay RA prefix wins; UDP then rejects the source/netif mismatch
+with `ERR_RTE`. Do not treat source binding as guaranteed egress or add a static
+WG address (which would create an unwanted implicit `/64`) to work around it.
+
+The shared test-app helper `bind_probe_interface` finds exactly one up/link-up
+`wg` netif with the configured, valid IPv6 source under the TCP/IP core lock.
+It resolves the actual lwIP interface name, releases the lock, and calls
+`lwip_setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, &ifreq, sizeof(ifreq))`. This
+SDK expects **`struct ifreq`**, unlike Linux's bare name-buffer convention. The
+socket implementation (`src/api/sockets.c:lwip_setsockopt_impl`) calls
+`udp_bind_netif`, recording the interface index in the PCB. `src/core/udp.c`'s
+send path checks that index first, bypassing `ip6_route` for that socket. Both
+probes and replies use the same bound FD. Missing/ambiguous netif or option failure
+closes the FD before any packet is sent; there is no unbound fallback.
+
+`IPV6_MULTICAST_IF` only controls multicast and is not a unicast fix. A ULA's
+`sin6_scope_id` is not a replacement for this device binding. No global routing
+hook, prefix, default router or default-interface change is installed. Other
+sockets retain their normal routing. Socket-option setup acquires the SDK's core
+lock internally, so it is called **outside** the helper's lookup lock.
+
+This is an index binding, not a lifetime lease or authenticated-readiness check.
+The application/backend remain owned by one task: it opens the FD only when the
+transport is up, closes it on stop/loss/epoch teardown, and creates/rebinds a new
+FD after recovery. Do not retain it across netif removal/index reuse or invoke the
+helper concurrently with backend destruction. `SO_BINDTODEVICE` also narrows UDP
+receive delivery to that interface. It does not bypass WireGuard AllowedIPs or
+provide path-MTU discovery. Physical egress still requires the checklist below.
+
+Host regression `interop_socket_egress` compiles unmodified socket, netconn, UDP,
+IPv6, ND6 and netif code, including the **exact ESP-IDF 5.2.1 lwIP sources in CI**.
+It captures actual `netif->output_ip6` calls and checks a competing RA prefix,
+source-only failure, enforced probe/reply egress, unrelated IPv4/IPv6 traffic, no implicit
+WG `/64` or default changes, missing/stale interfaces and restart rebinding. Only
+the synchronous OS port and final NIC output boundary are simulated; there is
+no stubbed route, socket option, UDP send or IPv6 output function. Removing the
+socket-option call in a temporary negative-control build made the real probe
+send assertion fail. This is a host routing regression, not RF/peer acceptance.
+
+Run that regression separately with IDF 5.2.1 exported:
+
+```sh
+cmake -S integration/wireguard_interop/routing -B /tmp/ndwg-routing \
+  -D INTEROP_LWIP_SOURCE_DIR="$IDF_PATH/components/lwip/lwip" \
+  -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer" \
+  -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer"
+cmake --build /tmp/ndwg-routing
+UBSAN_OPTIONS=halt_on_error=1 ASAN_OPTIONS=detect_leaks=1 ctest --test-dir /tmp/ndwg-routing --output-on-failure
+```
+
+The ordinary host build also runs it against the supplied `LWIP_SOURCE_DIR`;
+`INTEROP_LWIP_SOURCE_DIR` can select a separate exact SDK tree. Its OS test port
+uses lwIP's synchronous unit-test semaphores/mailboxes with normal invalid-handle
+initialization, so it tests packet routing rather than FreeRTOS scheduling.
 
 ## Build and flash (ESP-IDF 5.2.1)
 
@@ -197,8 +262,12 @@ route snapshots and capture hashes; never attach keys or private JSON.
    `mtu_oversize_rejected` errno against the successful boundary-size probes;
    unrelated socket/network errors do not establish MTU rejection. ESP `boundary_echo` must increase. This does not establish
    arbitrary underlay path-MTU discovery; test a lower-MTU WAN separately if needed.
-5. **Route isolation:** while up, ESP `bound_peer_wg=1`, `unbound_peer_wg=0`,
-   `default_wg=0`. Before/after route diffs on Linux contain only the dedicated lab
+5. **Route isolation:** while up, ESP `probe_ifindex` identifies the live WG
+   interface, `unbound_peer_wg=0` and `default_wg=0`. `source_route_peer_wg` is a
+   diagnostic hint and need not be one under a competing RA; actual probes/replies
+   must still traverse WG. Confirm with WG/underlay captures and successful traffic,
+   including a lab underlay RA that would win source-only route selection.
+   Before/after route diffs on Linux contain only the dedicated lab
    addresses/routes; no default route changes. Verify an unrelated IPv4/IPv6
    destination still selects the original host interface with `ip route get` and
    `ip -6 route get`. Do not change host routes to force a passing result.
@@ -236,11 +305,12 @@ ip -j -6 route show table all > "$LAB/routes6.after.json"
   was supplied. Physical flash/run: **not run**.
 - Real Linux/ESP handshake, encrypted IPv6 exchange, RF recovery, rekey and device
   heap/stack/resource measurements: **not run**, all pending the checklist above.
-- All ten host CTest suites passed: 159 C++ tests plus nine Python tests (168
-  total), including existing M1–M3 regressions. ASan/UBSan with leak detection
-  passed all ten suites (Python itself is not sanitizer-instrumented).
+- All eleven host CTest suites passed: the existing 159 C++ tests plus nine
+  Python tests (168 total), and the real socket-egress regression above.
+  ASan/UBSan with leak detection passed the suites (Python itself is not
+  sanitizer-instrumented).
 - The opt-in classic ESP32 application built and linked using ESP-IDF 5.2.1;
-  image size 928,192 bytes, with 11% of the default app partition free.
+  image size 931,344 bytes, with 11% of the default app partition free.
 - Shell syntax and Python compilation checks passed. CI additionally builds the
   default/Wi-Fi/production-backend/probe configurations and QEMU identity regression.
   None of these execute physical interoperability tests.

@@ -63,6 +63,16 @@ jobs:
             -D SDKCONFIG=/tmp/wg-backend-build/sdkconfig \
             -D "SDKCONFIG_DEFAULTS=$PWD/examples/minimal_body/sdkconfig.wifi-ci.defaults;$PWD/examples/minimal_body/sdkconfig.wireguard.defaults" \
             -D WIREGUARD_SOURCE_DIR=/tmp/wireguard build
+      - name: Test socket egress with exact ESP-IDF 5.2.1 lwIP sources
+        shell: bash
+        run: |
+          . /opt/esp/idf/export.sh
+          cmake -S integration/wireguard_interop/routing -B /tmp/wg-routing-tests \
+            -D INTEROP_LWIP_SOURCE_DIR=/opt/esp/idf/components/lwip/lwip \
+            -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer" \
+            -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer"
+          cmake --build /tmp/wg-routing-tests
+          UBSAN_OPTIONS=halt_on_error=1 ASAN_OPTIONS=detect_leaks=1 ctest --test-dir /tmp/wg-routing-tests --output-on-failure
       - name: Build opt-in interoperability application (no hardware acceptance)
         shell: bash
         run: |

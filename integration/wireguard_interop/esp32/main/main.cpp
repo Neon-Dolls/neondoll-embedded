@@ -2,6 +2,7 @@
 #include <neondoll/esp32_platform.hpp>
 #include <neondoll/esp32_wireguard.hpp>
 #include "../../packet.hpp"
+#include "../../bind_probe.hpp"
 #include <cJSON.h>
 #include <driver/uart.h>
 #include <esp_vfs_dev.h>
@@ -47,6 +48,7 @@ struct Config {
 } config;
 bool configured=false, finished=false, pending=false, tcpip_ready=false;
 int probe=-1;
+unsigned probe_ifindex=0;
 uint32_t sequence=0, pending_sequence=0;
 size_t pending_size=0;
 uint64_t sent=0, echo_ok=0, linux_requests=0, unexpected_rx=0, bad_rx=0, send_errors=0;
@@ -59,7 +61,7 @@ void event(const char* name,int result=0) {
     std::printf("NDWG {\"event\":\"%s\",\"result\":%d,\"ms\":%lld}\n",name,result,
         static_cast<long long>(esp_timer_get_time()/1000));
 }
-void close_probe() { if(probe>=0){close(probe);probe=-1;}pending=false; }
+void close_probe() { if(probe>=0){close(probe);probe=-1;}probe_ifindex=0;pending=false; }
 void metrics() {
     unsigned count=0, wg=0, udp=0;bool default_wg=false, bound=false, unbound=false;
     // Read-only inspection: no routes or netif state are changed here.
@@ -77,7 +79,7 @@ void metrics() {
     }
     std::printf("NDWG {\"event\":\"metrics\",\"ms\":%lld,\"wifi\":%d,\"epoch\":%llu,"
         "\"tunnel\":%d,\"ready\":%d,\"heap\":%u,\"heap_min\":%u,\"largest\":%u,\"owner_stack_min_bytes\":%u,"
-        "\"resource_sample_valid\":%d,\"netifs\":%u,\"wg_netifs\":%u,\"udp_pcbs\":%u,\"default_wg\":%d,\"bound_peer_wg\":%d,\"unbound_peer_wg\":%d,"
+        "\"resource_sample_valid\":%d,\"netifs\":%u,\"wg_netifs\":%u,\"udp_pcbs\":%u,\"default_wg\":%d,\"source_route_peer_wg\":%d,\"probe_ifindex\":%u,\"unbound_peer_wg\":%d,"
         "\"device_sent\":%llu,\"device_echo_ok\":%llu,\"linux_requests\":%llu,\"unexpected_rx\":%llu,\"bad_rx\":%llu,"
         "\"send_errors\":%llu,\"boundary_sent\":%llu,\"boundary_echo\":%llu,\"oversized_rejected\":%llu,\"oversized_accepted\":%llu}\n",
         static_cast<long long>(esp_timer_get_time()/1000),network.available(),
@@ -85,7 +87,7 @@ void metrics() {
         backend.status()==neondoll::WireGuardBackend::State::up,
         unsigned(heap_caps_get_free_size(MALLOC_CAP_8BIT)),unsigned(heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT)),
         unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)),unsigned(uxTaskGetStackHighWaterMark(nullptr)),
-        tcpip_ready,count,wg,udp,default_wg,bound,unbound,
+        tcpip_ready,count,wg,udp,default_wg,bound,probe_ifindex,unbound,
         sent,echo_ok,linux_requests,unexpected_rx,bad_rx,send_errors,boundary_sent,boundary_echo,
         oversized_rejected,oversized_accepted);
 }
@@ -212,6 +214,9 @@ void packets(int64_t now) {
     if(probe<0) {
         probe=socket(AF_INET6,SOCK_DGRAM,IPPROTO_UDP);
         if(probe<0){event("socket_failed",errno);return;}
+        if(interop::bind_probe_interface(probe,config.local.sin6_addr,probe_ifindex)) {
+            event("interface_bind_failed",errno);close_probe();return;
+        }
         if(bind(probe,reinterpret_cast<sockaddr*>(&config.local),sizeof(config.local))||
             fcntl(probe,F_SETFL,O_NONBLOCK)){event("bind_failed",errno);close_probe();return;}
         event("socket_bound");

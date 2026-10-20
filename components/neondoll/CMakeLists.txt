@@ -9,6 +9,7 @@ idf_component_register(SRCS ${wg_sources} "src/neondoll.cpp"
                            "src/esp32_network.cpp"
                            "src/network_supervisor.cpp"
                            "src/wireguard_transport.cpp"
+                           "src/doll_link.cpp"
                        INCLUDE_DIRS "include"
                        REQUIRES lwip mbedtls esp_system nvs_flash esp_timer bootloader_support log esp_wifi esp_netif esp_event freertos)
 target_compile_features(${COMPONENT_LIB} PUBLIC cxx_std_17)

@@ -1,0 +1,12 @@
+{
+  "wifi_ssid": "REPLACE_WITH_LAB_SSID",
+  "wifi_password": "REPLACE_WITH_LAB_PASSWORD",
+  "private_key": "REPLACE_WITH_TEST_ESP32_PRIVATE_KEY_BASE64",
+  "peer_public_key": "REPLACE_WITH_LINUX_PUBLIC_KEY_BASE64",
+  "endpoint_ipv4": "192.0.2.1",
+  "endpoint_port": 51820,
+  "local_ipv6": "fd42:4e44:2::2",
+  "peer_ipv6": "fd42:4e44:1::1",
+  "allowed_prefix": "fd42:4e44:1::",
+  "allowed_length": 65
+}

@@ -80,11 +80,3 @@ jobs:
           idf.py -C integration/wireguard_interop/esp32 -B /tmp/wg-interop-build \
             -D SDKCONFIG=/tmp/wg-interop-build/sdkconfig \
             -D NEONDOLL_WG_INTEROP=ON -D WIREGUARD_SOURCE_DIR=/tmp/wireguard build
-      - uses: actions/upload-artifact@v4
-        with:
-          name: minimal-body-esp32
-          path: |
-            examples/minimal_body/build/minimal_body.bin
-            examples/minimal_body/build/minimal_body.elf
-            examples/minimal_body/build/qemu-boot-*.log
-            examples/minimal_body/build/wifi/minimal_body.bin

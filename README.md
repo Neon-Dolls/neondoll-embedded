@@ -28,3 +28,7 @@ Pinned ESPHome backend evaluation and unresolved IPv6 blockers:
 M3.2b production ESP-IDF backend: [acceptance and hardware requirements](docs/M3_2B_ACCEPTANCE.md).
 
 M3.2c opt-in ESP32/Linux interoperability lab: [run instructions and pending physical acceptance](docs/M3_2C_ACCEPTANCE.md).
+
+M4.1 adds a transport-neutral Doll Link lifecycle foundation; canonical Body
+authentication remains an explicit protocol decision. See
+[scope, ownership, limits and acceptance](docs/M4_1_ACCEPTANCE.md).
